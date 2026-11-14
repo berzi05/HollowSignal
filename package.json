@@ -1,0 +1,14 @@
+{
+  "name": "hollow-signal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline-first survival coordination for the Life underground hackathon",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "check": "node --check server.mjs && node --check dist/app.js && node --check dist/engine.js && node --check dist/relay.js && node --check dist/sw.js && node --test"
+  },
+  "license": "MIT"
+}

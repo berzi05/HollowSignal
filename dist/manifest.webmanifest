@@ -1,0 +1,14 @@
+{
+  "id": "./",
+  "name": "Hollow Signal",
+  "short_name": "Hollow Signal",
+  "description": "Survival coordination for the Hollow. Hackathon simulation with offline check-ins.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#111717",
+  "theme_color": "#111717",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
