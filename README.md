@@ -2,7 +2,7 @@
 
 **A neighborhood survival console for the people the Hollow leaves in the dark.**
 
-Built for **Life underground**, a dystopian hackathon track set beneath an unlivable surface. Hollow Signal connects three decisions: **where systems may fail, how scarce supplies should be shared, and who still needs help**.
+Built for **Life underground**, a dystopian hackathon track set beneath an unlivable surface. Hollow Signal connects four decisions: **where systems may fail, how scarce supplies should be shared, which refuge routes remain usable, and who still needs help**.
 
 The project is a working, browser-based prototype with synthetic data. It does not connect to real sensors, emergency services, or radio hardware.
 
@@ -18,6 +18,8 @@ When the Directorate cuts power, a deeper neighborhood loses more than light: ve
 | **2 — Fair rationing** | Calculates allocations for power, water, or food with an essential floor and explicit needs weighting. |
 | **3 — Dangerous heat** | Surfaces heat and ventilation problems alongside power conditions. |
 | **4 — Unsafe water** | Flags simulated water-quality failures and gives an action to investigate. |
+| **5 — Tunnel access** | Reroutes around a flooded shaft and respects step-free requirements; no route is returned when constraints cannot be met. |
+| **6 — Overcrowding** | Checks that a refuge has modeled capacity for the whole traveling group. |
 | **7 — Communication during shutdowns** | Caches the application and supports manual JSON transfer of locally recorded information. |
 | **8 — Family separation** | Records resident check-ins with location and safe, moving, or help-needed status. |
 
@@ -48,6 +50,18 @@ npm run check  # Project checks
 
 See [the 90-second pitch and demo script](docs/DEMO.md) for a judging walkthrough.
 
+## Response Lab: a connected blackout drill
+
+Select **Start the blackout drill** on Overview for a three-step walkthrough: trip the plant, close the lower shaft, and prepare a family signal. The new **Response lab** view connects a 0–120 minute fictional cascade, an allocation-policy comparison using the same power budget, and refuge routing with closure, capacity, and step-free constraints.
+
+At the default 1,000 kW demonstration budget, the upper-level-first comparison covers about 57% of deep-level essential demand; the community allocation covers 100%. These are calculated shares of fictional requirements, not claims about lives saved. Lower the budget to see the shortfall honestly.
+
+The route planner can return **no viable candidate**. With the lower shaft closed, a step-free journey from L20 is unavailable; the app prepares a help-request draft instead of inventing an accessible route. A route never reserves capacity or dispatches responders.
+
+**Export response brief** downloads the scenario, clock, budget, constraints, assumptions, allocations, and route. This planning document is separate from the importable Community relay packet. The rehearsal clock affects the Response Lab; Overview and Resource allocation retain the initial snapshot of the selected scenario.
+
+New modules: `dist/crisis.js` (pure model), `dist/response-ui.js` (interactive lab), and `dist/response.css`. Tests cover budget conservation, cascading changes, rerouting, accessibility, capacity, UI interactions, and the complete offline dependency graph. See [the 90-second presentation](docs/DEMO.md).
+
 ## How it works
 
 The app is deliberately small enough to serve from a neighborhood computer. Static HTML, CSS, and native JavaScript modules run the interface; a deterministic engine owns the simulation and allocation rules. No API key, account, cloud backend, or build step is required.
@@ -65,6 +79,9 @@ Resident input → Browser storage → JSON export → Manual transfer → Impor
 | `dist/app.js` | Interface, local persistence, and transfer interactions |
 | `dist/engine.js` | Scenario data, risk rules, allocation, and check-in validation |
 | `dist/relay.js` | Field reports, packet validation, and deterministic merging |
+| `dist/crisis.js` | Time projection, policy comparison, refuge routing, and response briefs |
+| `dist/response-ui.js` | Guided drill, interactive comparisons, and travel/help drafts |
+| `dist/response.css` | Responsive Response Lab presentation |
 | `dist/sw.js` | Application cache for subsequent offline visits |
 | `test/engine.test.js` | Deterministic behavior and edge-case tests |
 | `test/relay.test.js` | Packet validation, report handling, and merge tests |
