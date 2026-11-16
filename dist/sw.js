@@ -1,7 +1,7 @@
 // Increment the revision whenever the app shell changes, and keep CACHE_REVISION in
 // app.js identical (test/sw.test.js enforces this). Scope isolates installations.
 const CACHE_PREFIX = `hollow-signal:${self.registration.scope}:`;
-const REVISION = 'v5';
+const REVISION = 'v6';
 const CACHE_NAME = `${CACHE_PREFIX}${REVISION}`;
 const SHELL = ['./', './index.html', './styles.css', './response.css', './app.js', './engine.js', './relay.js', './crisis.js', './response-ui.js', './manifest.webmanifest', './icon.svg', './fonts/dm-sans.ttf', './fonts/space-grotesk.ttf']
   .map(path => new URL(path, self.registration.scope).href);

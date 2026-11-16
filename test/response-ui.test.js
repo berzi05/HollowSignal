@@ -12,10 +12,14 @@ function harness() {
     if (!elements.has(selector)) elements.set(selector, {
       innerHTML: '', textContent: '', value: '', checked: false, listeners: new Map(),
       addEventListener(name, handler) { this.listeners.set(name, handler); },
+      focus() { this.focused = true; },
+      scrollIntoView() { this.scrolled = true; },
     });
     return elements.get(selector);
   };
-  const document = { querySelector: get, querySelectorAll: () => [] };
+  const sections = ['response-reserves', 'response-allocation', 'response-routes'];
+  const buttons = sections.map(id => Object.assign(get('#jump-' + id), { dataset: { plannerTarget: id } }));
+  const document = { querySelector: get, querySelectorAll: selector => selector === '[data-planner-target]' ? buttons : [] };
   const location = { hash: '' };
   const context = vm.createContext({ ...crisis, LEVELS, document, location });
   vm.runInContext(source.replace(/^import .*;\r?\n/gm, '').replace('export function initResponseLab', 'function initResponseLab'), context);
@@ -86,4 +90,19 @@ test('group validation preserves a valid plan, and a brief exports the current c
   h.lab.reset();
   assert.equal(h.get('#response-time').value, 0);
   assert.equal(h.get('#route-closure').checked, false);
+});
+
+test('planner shortcuts focus the requested section without resetting current inputs', () => {
+  const h = harness();
+  h.lab.setOrigin('L12');
+  h.fire('#response-supply', 'input', { value: '700' });
+  h.fire('#jump-response-routes');
+  assert.equal(h.get('#response-routes').focused, true);
+  assert.equal(h.get('#response-routes').scrolled, true);
+  assert.equal(h.get('#route-origin').value, 'L12');
+  h.fire('#export-response');
+  const brief = JSON.parse(h.downloads[0].content);
+  assert.equal(brief.inputs.origin, 'L12');
+  assert.equal(brief.inputs.supply, 700);
+  assert.throws(() => h.lab.setOrigin('L99'), /known starting level/);
 });

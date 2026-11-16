@@ -33,7 +33,8 @@ function harness(initialHash = '') {
         addEventListener(name, handler) { this.listeners.set(name, handler); },
         dispatchEvent(event) { this.listeners.get(event.type)?.({ ...event, target: this, currentTarget: this, preventDefault() {} }); },
         querySelector: selector => document.querySelector(selector),
-        focus() {},
+        focus() { this.focused = true; },
+        scrollIntoView() { this.scrolled = true; },
         setAttribute() {},
         classList: { add() {}, remove() {} },
       });
@@ -118,4 +119,16 @@ test('the main-content skip link preserves each selected view', () => {
     assert.deepEqual(app.visible(), [`view-${view}`]);
     assert.deepEqual(app.active(), [view]);
   }
+});
+
+test('planning from a neighborhood carries its origin and focuses the refuge section', () => {
+  const app = harness();
+  app.fire('#drill-respond', 'click');
+  app.fire('#level-detail', 'click', { closest: () => ({ dataset: { planLevel: 'L12' } }) });
+  assert.deepEqual(app.visible(), ['view-response']);
+  assert.equal(app.get('#route-origin').value, 'L12');
+  assert.equal(app.get('#response-routes').focused, true);
+  assert.equal(app.get('#response-routes').scrolled, true);
+  assert.match(app.get('#route-result').innerHTML, /L12/);
+  assert.match(app.get('#route-context').textContent, /Geothermal outage.*20 min/);
 });

@@ -52,6 +52,8 @@ export function initResponseLab({ getScenario, onScenario, onCheckIn, download, 
     });
     latest = { situation, comparison, route };
     $('#response-time-label').textContent = `T + ${state.minutes} min`;
+    const scenarioLabel = { baseline: 'Current conditions', blackout: 'Geothermal outage', water: 'Recycler contamination', heat: 'Cooling system failure' }[scenario];
+    $('#route-context').textContent = `${scenarioLabel} · Projection at T + ${state.minutes} min. Route conditions use this projected snapshot.`;
     $('#response-supply-label').textContent = `${fmt(state.supply)} kW`;
     $('#response-narrative').textContent = explanations[story];
     const first = situation.windows[0];
@@ -99,6 +101,15 @@ export function initResponseLab({ getScenario, onScenario, onCheckIn, download, 
     state = defaults(); story = 1; syncControls();
     onScenario('blackout'); render(); location.hash = 'response';
   }
+  function focusSection(id) {
+    if (!['response-reserves', 'response-allocation', 'response-routes'].includes(id)) return;
+    const section = $('#' + id);
+    section.scrollIntoView({ block: 'start' });
+    section.focus({ preventScroll: true });
+  }
+  document.querySelectorAll('[data-planner-target]').forEach(button => {
+    button.addEventListener('click', () => focusSection(button.dataset.plannerTarget));
+  });
   $('#start-drill').addEventListener('click', startDrill);
   $('#drill-shock').addEventListener('click', startDrill);
   $('#drill-respond').addEventListener('click', () => {
@@ -128,5 +139,12 @@ export function initResponseLab({ getScenario, onScenario, onCheckIn, download, 
     toast('Response brief exported with assumptions, allocations, and route. Carry or share the file manually.');
   });
   syncControls(); render();
-  return { render, reset() { state = defaults(); story = 0; syncControls(); render(); } };
+  return {
+    render, focusSection,
+    setOrigin(id) {
+      if (!LEVELS.some(level => level.id === id)) throw new TypeError('Choose a known starting level.');
+      state.origin = id; syncControls(); render();
+    },
+    reset() { state = defaults(); story = 0; syncControls(); render(); },
+  };
 }

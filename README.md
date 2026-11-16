@@ -1,147 +1,131 @@
 # Hollow Signal
 
-**A neighborhood survival console for the people the Hollow leaves in the dark.**
+**A browser app that helps an underground neighborhood understand a crisis, share limited supplies, find a refuge route, and keep people in contact.**
 
-Built for **Life underground**, a dystopian hackathon track set beneath an unlivable surface. Hollow Signal connects four decisions: **where systems may fail, how scarce supplies should be shared, which refuge routes remain usable, and who still needs help**.
+Built for the **Life underground** track. The app models one sector of the Hollow: six neighborhoods and 19,000 fictional residents. It runs online normally and can keep working offline after its application cache has installed.
 
-The project is a working, browser-based prototype with synthetic data. It does not connect to real sensors, emergency services, or radio hardware.
+## What the app actually does
 
-[Open the private demo](https://hollow-signal-berzi05.indigo-pin-3384.chatgpt.site) · Owner sign-in required. For judges or teammates, run the app locally using the instructions below.
+| Page | What you can do | What the app gives you |
+| --- | --- | --- |
+| **Overview** | Choose a power, water, or heat scenario; select a neighborhood. | Population-weighted conditions, explained warnings, modeled reserve time, and a **Plan for this level** action. |
+| **Crisis planner** | Advance the clock, change the power budget, select a starting level and group size, close a tunnel, or require step-free access. | Projected conditions, a side-by-side allocation comparison, and a candidate refuge route with time, capacity, and hazard warnings. |
+| **Share supplies** | Choose power, water, or food and set the available amount. | Per-level allocations, essential shortfalls, coverage, unused supply, the policy formula, and a downloadable plan. |
+| **Community** | Save a call-sign check-in, search for someone, record a field observation, or import/export a relay packet. | Persistent local records and a way to carry updates manually between devices. |
 
-## The idea
+The planner connects to the rest of the app. Choosing **Plan for L20**, for example, opens the planner with L20 as the route origin. A candidate route can prepare a travel check-in. If no route meets the access and capacity constraints, it prepares a help request instead. You review the draft and save it yourself.
 
-When the Directorate cuts power, a deeper neighborhood loses more than light: ventilation slows, water treatment fails, and families lose contact. Separate dashboards miss that chain of events. Hollow Signal gives a neighborhood coordinator one place to understand it and act.
+## Start the app
 
-| Hackathon challenge | What the prototype does |
-| --- | --- |
-| **1 — Blackout and air warnings** | Scores conditions across six levels, explains contributing risks, and estimates reserve time from the simulated readings. |
-| **2 — Fair rationing** | Calculates allocations for power, water, or food with an essential floor and explicit needs weighting. |
-| **3 — Dangerous heat** | Surfaces heat and ventilation problems alongside power conditions. |
-| **4 — Unsafe water** | Flags simulated water-quality failures and gives an action to investigate. |
-| **5 — Tunnel access** | Reroutes around a flooded shaft and respects step-free requirements; no route is returned when constraints cannot be met. |
-| **6 — Overcrowding** | Checks that a refuge has modeled capacity for the whole traveling group. |
-| **7 — Communication during shutdowns** | Caches the application and supports manual JSON transfer of locally recorded information. |
-| **8 — Family separation** | Records resident check-ins with location and safe, moving, or help-needed status. |
-
-## Try it locally
-
-Requires **Node.js 22 or newer**. There are no application dependencies to install.
+Use **Node.js 22 or later**. From the repository directory:
 
 ```sh
-git clone https://github.com/berzi05/PatriotHackathon.git
-cd PatriotHackathon
 npm start
 ```
 
-Open the localhost URL printed by the server. The app is served from `dist/`; any static host can serve that directory. Use localhost or HTTPS for service-worker support.
+Open **http://127.0.0.1:3000**. No API key, account, dependency installation, or build step is needed. All JavaScript, styles, fonts, and images are included in `dist/`.
 
-```sh
-npm test       # Domain-engine, relay, and static-server tests
-npm run check  # Project checks
-```
+The development server binds to localhost by default. It serves static assets; it does not receive resident records.
 
-## A short demo
+## Find what you need
 
-1. Open **Overview** and select a deep level in **The pulse of Sector 07**. Read the reasons behind its warning.
-2. In **Situation simulator**, change **Current conditions** to **Geothermal outage**, **Recycler contamination**, or **Cooling system failure**. Watch affected levels and recommended actions change.
-3. Open **Resource allocation**, select a resource, and reduce **Available supply**. Compare each level's allocation and demand coverage. Use **Export plan** to save the result.
-4. Open **Community relay**, enter a fictional call sign, level, and status, then select **Save my check-in**. Reload the page to see that local state persists.
-5. Use **Report an incident** to add an unverified field observation. In **Community relay**, select **Export** to save a JSON packet of check-ins and reports, then **Import** that file in another browser. This demonstrates manual transfer when central networking is unavailable.
+The four main tabs have visible text labels on desktop, tablet, and phone layouts. Overview also has direct shortcuts for planning, supplies, and community signals.
 
-See [the 90-second pitch and demo script](docs/DEMO.md) for a judging walkthrough.
+1. **Understand a problem:** choose a situation and inspect a level on Overview. The details explain which readings caused each warning.
+2. **Plan for that neighborhood:** use **Plan for this level**. In the Crisis planner, jump straight to **Reserves**, **Power allocation**, or **Refuge route**.
+3. **Check whether everyone can travel:** set the group size, mark a flooded shaft, and select **Need a step-free route** when appropriate. The planner either gives a candidate with explicit warnings or says no candidate meets the constraints.
+4. **Leave a signal:** choose **Draft a travel check-in** or **Draft a help request**, enter a call sign, review the message, and save. Export a relay packet to share the saved record.
+5. **Plan other supplies:** open Share supplies for water or food. Adjust the amount and export the allocation if you need a portable record.
 
-## Response Lab: a connected blackout drill
+**Explore a blackout** is a shortcut to a preset scenario. You can also use every control directly.
 
-Select **Start the blackout drill** on Overview for a three-step walkthrough: trip the plant, close the lower shaft, and prepare a family signal. The new **Response lab** view connects a 0–120 minute fictional cascade, an allocation-policy comparison using the same power budget, and refuge routing with closure, capacity, and step-free constraints.
+## How the useful parts work
 
-At the default 1,000 kW demonstration budget, the upper-level-first comparison covers about 57% of deep-level essential demand; the community allocation covers 100%. These are calculated shares of fictional requirements, not claims about lives saved. Lower the budget to see the shortfall honestly.
+### Warnings and reserve time
 
-The route planner can return **no viable candidate**. With the lower shaft closed, a step-free journey from L20 is unavailable; the app prepares a help-request draft instead of inventing an accessible route. A route never reserves capacity or dispatches responders.
+The Overview combines simulated power coverage, battery reserve, oxygen, CO₂, temperature, and water-quality readings. Rule-based warnings include an explanation and a suggested community response.
 
-**Export response brief** downloads the scenario, clock, budget, constraints, assumptions, allocations, and route. This planning document is separate from the importable Community relay packet. The rehearsal clock affects the Response Lab; Overview and Resource allocation retain the initial snapshot of the selected scenario.
+Reserve time is calculated as `reserve / (1 - power / 100)` when supply coverage is below 100%. Full coverage means no modeled reserve draw.
 
-New modules: `dist/crisis.js` (pure model), `dist/response-ui.js` (interactive lab), and `dist/response.css`. Tests cover budget conservation, cascading changes, rerouting, accessibility, capacity, UI interactions, and the complete offline dependency graph. See [the 90-second presentation](docs/DEMO.md).
+The Crisis planner projects 0–120 minutes from the selected scenario. Once reserve power is exhausted, the model increases ventilation and cooling problems using rates shown in **Show the model, the limits, and what gets exported**.
 
-## How it works
+**The planner clock changes the projection in the planner only.** Overview and Share supplies retain the initial snapshot of the selected scenario.
 
-The app is deliberately small enough to serve from a neighborhood computer. Static HTML, CSS, and native JavaScript modules run the interface; a deterministic engine owns the simulation and allocation rules. No API key, account, cloud backend, or build step is required.
+### Resource sharing
 
-```text
-Synthetic level readings → Risk assessment → Explained warnings
-Population + need + supply → Allocation engine → Reviewable supply plan
-Resident input → Browser storage → JSON export → Manual transfer → Import
-```
+The community allocation gives every level a proportional essential share first. When supply exceeds that floor, remaining supply follows population, vulnerability, and current hazards, capped at each level's modeled demand.
 
-| File | Responsibility |
-| --- | --- |
-| `dist/index.html` | Application shell and accessible page structure |
-| `dist/styles.css` | Responsive visual design |
-| `dist/app.js` | Interface, local persistence, and transfer interactions |
-| `dist/engine.js` | Scenario data, risk rules, allocation, and check-in validation |
-| `dist/relay.js` | Field reports, packet validation, and deterministic merging |
-| `dist/crisis.js` | Time projection, policy comparison, refuge routing, and response briefs |
-| `dist/response-ui.js` | Guided drill, interactive comparisons, and travel/help drafts |
-| `dist/response.css` | Responsive Response Lab presentation |
-| `dist/sw.js` | Application cache for subsequent offline visits |
-| `test/engine.test.js` | Deterministic behavior and edge-case tests |
-| `test/relay.test.js` | Packet validation, report handling, and merge tests |
-| `test/server.test.js` | Static-server behavior and path isolation tests |
-| `test/sw.test.js` | Service-worker install, cache status, activation, and fetch tests |
-| `server.mjs` | Local static development server |
-
-### Risk assessment
-
-Warnings are rule-based and explainable. They combine simulated power, reserve, air, temperature, and water readings. A warning is a prompt to investigate, not a calibrated forecast or proof that water or air is safe. The scenarios are reproducible, so a judge can see exactly which changed conditions cause a warning.
-
-| Reading | Watch | Critical |
+| Resource | Modeled full demand per resident | Essential share |
 | --- | --- | --- |
-| Power supply coverage | Below 70% | Below 40% |
-| Oxygen | Below 20% | Below 19.5% |
-| CO₂ | At least 1,500 ppm | At least 5,000 ppm |
-| Temperature | At least 30°C | At least 34°C |
-| Synthetic water-quality index | Below 80/100 | Below 60/100 |
-
-These are illustrative demo rules, not validated operating limits. Reserve time is modeled as `reserve / (1 - power / 100)` when supply coverage is below 100%, where reserve is the stored energy expressed as minutes of full essential demand. This assumes a constant shortfall; it is not a forecast of when a plant will fail.
-
-### Fair allocation
-
-The allocator first accounts for essential needs. If the available supply cannot cover that floor, each level receives a proportional share of its essential requirement and the plan reports the shortfall. Remaining supply is distributed against unmet demand using explicit needs weighting, without exceeding a level's modeled demand. The plan preserves the supplied budget and exposes coverage so a coordinator can review the tradeoffs.
-
-| Resource | Modeled demand per person | Essential share of demand |
-| --- | --- | --- |
-| Power | 0.08 kW, instantaneous | 60% |
+| Power | 0.08 kW | 60% |
 | Water | 3 liters per day | Two thirds |
 | Food | 1 ration per day | 70% |
 
-For supply above the essential floor, the weight is `population × (1 + 1.5 × vulnerable fraction + 0.5 × risk score / 100)`. Capped weighted allocation redistributes any surplus from a fully supplied level to levels with remaining demand. Amounts are quantized to 0.001 units. These are hackathon assumptions; the modeled water demand, for example, does not represent complete domestic and sanitation needs.
+The planner compares power allocation against a fictional policy that fills upper levels first. Both policies use exactly the same budget.
 
-This is a transparent policy prototype, not a claim that one formula settles fairness. Residents should be able to inspect, challenge, and change the assumptions before a real deployment.
+For example, at the preset 1,000 kW budget, upper-level-first allocation covers about **57%** of deep-level essential demand; the community policy covers **100%**. Reducing the budget makes the shortfall visible. These percentages describe fictional planning requirements, not lives saved or supplies actually delivered.
 
-### Offline behavior
+### Refuge routing
 
-After a successful initial visit and cache installation, the service worker can serve the app without a connection. Look for **Offline cache ready** before relying on a cached visit; some hosting or browser configurations may prevent caching. Records persist in that browser's local storage. JSON export/import demonstrates a store-and-forward workflow: a person must actually carry or send the file to another device.
+The route search considers tunnel walking times, current modeled hazards, closures, step-free access, and space for the entire group.
 
-Submitting another check-in under the same call sign updates its existing local record. Imported check-ins and reports are validated and merged by record ID; the newest timestamp wins, with deterministic handling of ties. Separate devices can create different IDs for the same call sign. This bounds duplicate records but does not verify who created them or whether a device's clock is correct.
+It removes closed or inaccessible connections, rejects critical destination readings, and chooses the reachable refuge with the lowest modeled travel cost: `walking minutes × (1 + destination risk score / 100)`.
 
-Field reports remain unverified observations. They appear in **Community field reports** and travel in relay packets; they do not automatically change sensor readings or risk scores. An exported allocation plan is a separate JSON document and cannot be imported as a relay packet.
+A flooded lower shaft can leave only a stair bypass from L20. Requiring a step-free route then produces **No viable candidate**. The app never silently drops the access requirement.
 
-**There is no built-in mesh network, Bluetooth transport, automatic cross-device sync, or guaranteed message delivery.** A browser saying it has a network connection does not establish that another resident received a check-in. Cache availability also depends on browser support and storage retention.
+Critical intermediate levels and travel longer than the origin's remaining reserve are flagged. Capacity is a fictional snapshot; the route does not reserve space or certify safe passage.
 
-## Limits and responsible next steps
+### Check-ins, reports, and manual relay
 
-- All readings, population counts, thresholds, and incidents in the starting demo are fictional. No forecast accuracy or field safety has been established.
-- The prototype does not provide medical diagnosis, certify drinking water, operate life-support equipment, or dispatch help.
-- Browser records and exported files are not encrypted. Use aliases and fictional details in demos. Do not store sensitive resident health or identity information.
-- Local storage is not a backup. Clearing browser data, storage eviction, or losing a device can lose records. Imported records are not authenticated evidence.
-- Real deployment needs validated sensors, signed observations, authenticated and encrypted transport, delivery acknowledgments, auditability, accessibility testing, and resident oversight of resource policy.
+- A check-in stores a call sign, level, safe/help/moving status, optional message, and timestamp.
+- Updating the same local call sign updates its record.
+- Field reports store unverified observations about water, power, air, heat, or tunnels. They do not automatically alter sensor readings or close a route.
+- Import validates the whole packet before accepting changes. Records merge by ID and timestamp, with deterministic conflict handling and a 200-record limit per kind.
+- Export/import is manual: someone must carry or send the file. There is no automatic radio mesh, delivery acknowledgment, or emergency dispatch.
 
-## Where this could go
+## What is saved or exported
 
-1. Connect calibrated sensor gateways and display freshness, provenance, confidence, and device health for each reading.
-2. Add a tested neighborhood transport layer using appropriate local-network or radio gateways, with encrypted messages, deduplication, and delivery acknowledgments.
-3. Pilot the resource policy with residents and model critical facilities, reserve stocks, distribution losses, and transport constraints.
-4. Add clinic and shelter capacity without exposing individual medical histories.
-5. Use verified environmental observations to support later surface exploration planning.
+| Item | Where it lives | How to share it |
+| --- | --- | --- |
+| Saved check-ins and incident reports | This browser's local storage | Export/import a **relay packet** in Community. |
+| Resource allocation | Recalculated in memory | Use **Export plan** in Share supplies. |
+| Crisis projection and route | Recalculated in memory | Use **Export response brief** in the Crisis planner. |
+| Application assets | Browser service-worker cache after installation | Reload offline after **Offline cache ready** appears. |
+
+A response brief contains the exact scenario, clock, budget, route constraints, assumptions, allocations, and route result. It and an allocation plan are planning documents; neither is an importable relay packet.
+
+The availability indicator is visible on every page, including mobile. Offline caching needs a successful first visit on HTTPS or localhost. Local records are not a backup. **Clear local data** asks for confirmation before removing records and resetting the scenario.
+
+## Project structure
+
+| File | Responsibility |
+| --- | --- |
+| `dist/index.html` | Application pages, forms, navigation, and accessible labels |
+| `dist/app.js` | Navigation, rendering, local storage, and relay interactions |
+| `dist/engine.js` | Scenario readings, risk rules, resource allocation, and check-in validation |
+| `dist/crisis.js` | Time projection, policy comparison, constrained route search, and response briefs |
+| `dist/response-ui.js` | Planner controls and travel/help drafts |
+| `dist/relay.js` | Field reports, packet validation, and deterministic merges |
+| `dist/styles.css`, `dist/response.css` | Responsive presentation |
+| `dist/sw.js` | Versioned offline shell and cache-readiness checks |
+| `server.mjs` | Local static server with path isolation |
+| `test/` | Model, navigation, integration, relay, server, and offline-asset tests |
+
+## Check the code
+
+```sh
+npm run check
+```
+
+This runs syntax checks and the Node test suite. Tests cover allocation conservation, cascade behavior, blocked and inaccessible routes, refuge capacity, planner-to-check-in integration, browser-history handling, import validation, and the offline dependency graph.
+
+## Scope and limits
+
+This is a functional prototype using fictional environmental data, populations, capacities, and tunnel times. It has no live sensors, validated forecasts, supply-control hardware, refuge reservations, medical diagnosis, or dispatch service.
+
+The app's warnings and routes support exploring a scenario; they are not real-world safety instructions. Water scores do not establish potability. Browser records and exported files are not encrypted or authenticated; use aliases and fictional details.
+
+A real deployment needs calibrated sensors, current capacity data, verified routes, secure messaging, reliable transport, and residents' oversight of allocation policy.
 
 ## License
 
