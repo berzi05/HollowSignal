@@ -13,7 +13,7 @@ const fmt = (n, digits = 0) => {
 const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const storageKey = 'hollow-signal-v1';
 // Must match REVISION in sw.js (enforced by test/sw.test.js).
-const CACHE_REVISION = 'v3';
+const CACHE_REVISION = 'v4';
 const DEFAULTS = Object.freeze({ scenario: 'baseline', selected: 'L20', resource: 'power' });
 const state = { ...DEFAULTS, supply: 1140, checkIns: [], reports: [] };
 const VIEWS = {
@@ -64,8 +64,8 @@ function levelOptions() {
   $('#report-level').value = state.selected;
 }
 function showView() {
-  // Non-view hashes (e.g. the #main skip link) keep the current view instead of resetting it.
-  const requested = location.hash.slice(1);
+  // An empty hash is Overview; other non-view hashes (e.g. #main) keep the current view.
+  const requested = location.hash.slice(1) || 'overview';
   const view = Object.hasOwn(VIEWS, requested) ? requested : currentView ?? 'overview';
   const meta = VIEWS[view];
   $$('.view').forEach(el => { el.hidden = el.id !== `view-${view}`; });
