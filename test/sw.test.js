@@ -5,8 +5,8 @@ import vm from 'node:vm';
 
 const source = await readFile(new URL('../dist/sw.js', import.meta.url), 'utf8');
 const scope = 'https://example.test/hollow/';
-const currentCache = `hollow-signal:${scope}:v4`;
-const shell = ['/', '/index.html', '/styles.css', '/app.js', '/engine.js', '/relay.js', '/manifest.webmanifest', '/icon.svg', '/fonts/dm-sans.ttf', '/fonts/space-grotesk.ttf']
+const currentCache = `hollow-signal:${scope}:v6`;
+const shell = ['/', '/index.html', '/styles.css', '/response.css', '/app.js', '/engine.js', '/relay.js', '/crisis.js', '/response-ui.js', '/manifest.webmanifest', '/icon.svg', '/fonts/dm-sans.ttf', '/fonts/space-grotesk.ttf']
   .map(path => `${scope.slice(0, -1)}${path}`);
 
 function harness({ failInstall = false, offline = false } = {}) {
@@ -68,7 +68,7 @@ test('service worker installs the complete module graph under a subpath', async 
   assert.deepEqual(h.added, shell);
   assert.equal(h.lifecycle.skipped, true);
   assert.equal((await h.status()).ready, true);
-  assert.equal((await h.status()).revision, 'v4');
+  assert.equal((await h.status()).revision, 'v6');
 });
 
 test('offline status rejects missing, failed, old, and partially evicted caches', async () => {

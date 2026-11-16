@@ -1,5 +1,6 @@
 import { LEVELS, RESOURCE_RULES, getScenarioLevels, assessLevel, getSummary, allocateResource, createCheckIn, mergeCheckIns } from './engine.js';
 import { createReport, mergeReports, parsePacket, serializePacket } from './relay.js';
+import { initResponseLab } from './response-ui.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -13,12 +14,13 @@ const fmt = (n, digits = 0) => {
 const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const storageKey = 'hollow-signal-v1';
 // Must match REVISION in sw.js (enforced by test/sw.test.js).
-const CACHE_REVISION = 'v4';
+const CACHE_REVISION = 'v6';
 const DEFAULTS = Object.freeze({ scenario: 'baseline', selected: 'L20', resource: 'power' });
 const state = { ...DEFAULTS, supply: 1140, checkIns: [], reports: [] };
 const VIEWS = {
+  response: { heading: 'Plan the next move', description: 'Review reserve time, share available power, and find a refuge route for your group.', crumb: 'CRISIS PLANNER', title: 'Crisis planner' },
   overview: { heading: 'Keep the Hollow alive', description: 'Every level matters. See the risks. Share what we have. Stay connected.', crumb: 'OVERVIEW', title: 'Overview' },
-  resources: { heading: 'Enough to keep going', description: 'A transparent plan for sharing power, water, and food across every level.', crumb: 'RESOURCE ALLOCATION', title: 'Resource allocation' },
+  resources: { heading: 'Enough to keep going', description: 'A transparent plan for sharing power, water, and food across every level.', crumb: 'SHARE SUPPLIES', title: 'Share supplies' },
   community: { heading: 'Let them know you’re here', description: 'A neighborhood relay for the moments when connection matters most.', crumb: 'COMMUNITY RELAY', title: 'Community relay' }
 };
 let levels = getScenarioLevels();
@@ -26,6 +28,7 @@ let plan;
 let toastTimer;
 let offlineReady = false;
 let currentView;
+let responseLab;
 const scenarioNotes = {
   baseline: '',
   blackout: 'Geothermal outage simulated: power coverage drops 34 points from L08 down. Ventilation weakens and battery reserves shrink. Review the deepest levels first.',
@@ -119,6 +122,7 @@ function renderDetail() {
   const reserve = r.blackoutMinutes === null ? 'No reserve draw at full supply' : `${fmt(r.blackoutMinutes)} min modeled reserve`;
   const stats = [['POWER COVERAGE', `${l.power}%`, reserve], ['OXYGEN', `${l.air.toFixed(1)}%`, `${fmt(l.co2)} ppm CO₂`], ['TEMPERATURE', `${l.temp.toFixed(1)}°C`, l.temp >= 34 ? 'Critical heat signal' : 'Neighborhood sensor'], ['WATER INDEX', `${l.water}<small> / 100</small>`, l.water < 60 ? 'Testing required' : 'Synthetic sensor index']];
   $('#level-detail').innerHTML = `<div><div class="eyebrow muted">SELECTED NEIGHBORHOOD · ${l.id}</div><div class="detail-title"><h2>${l.name}</h2><span class="status-tag ${r.severity}">${r.severity}</span></div><p>${fmt(l.population)} residents · ${l.depth} m below surface</p></div><div class="detail-stats">${stats.map(s => `<div class="detail-stat"><span>${s[0]}</span><b>${s[1]}</b><p>${s[2]}</p></div>`).join('')}</div><div class="detail-actions"><strong>COMMUNITY RESPONSE</strong> &nbsp; ${r.warnings.length ? r.warnings.map(w => esc(w.action)).join(' ') : 'Keep monitoring local sensors and check that shared reserves are accessible.'}</div>`;
+  $('#level-detail').innerHTML += `<div class="detail-plan-action"><button class="button secondary compact" data-plan-level="${l.id}">Plan for ${l.id} →</button></div>`;
 }
 function configureResource() {
   const rule = RESOURCE_RULES[state.resource];
@@ -155,7 +159,7 @@ function renderReports() {
   const records = state.reports.slice(0, 3);
   $('#report-list').innerHTML = records.length ? records.map(r => `<div class="field-report"><span class="report-dot" aria-hidden="true"></span><div><p>${esc(r.detail)}</p><small>${r.level} · ${esc(r.type)} · ${esc(timeLabel(r.updatedAt))} · unverified</small></div></div>`).join('') : `<div class="field-empty"><p>No local reports yet. What you notice in your tunnel could help the next neighborhood.</p><button class="alert-action" id="first-report">Add a field report →</button></div>`;
 }
-function renderSituation() { renderMetrics(); renderMap(); renderAlerts(); renderDetail(); renderAllocation(); }
+function renderSituation() { renderMetrics(); renderMap(); renderAlerts(); renderDetail(); renderAllocation(); responseLab?.render(); }
 function download(name, contents) {
   const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
   const anchor = document.createElement('a');
@@ -164,11 +168,21 @@ function download(name, contents) {
 }
 function openReport() { $('#report-level').value = state.selected; $('#report-dialog').showModal(); }
 function updateConnection() {
-  $('#offline-status').textContent = offlineReady ? (navigator.onLine ? 'Offline cache ready' : 'Offline · cache ready') : (navigator.onLine ? 'Local relay available' : 'Offline · cache unverified');
+  const status = offlineReady ? (navigator.onLine ? 'Offline cache ready' : 'Offline · cache ready') : (navigator.onLine ? 'Local relay available' : 'Offline · cache unverified');
+  $('#offline-status').textContent = status;
+  $('#connection-status').textContent = status;
 }
 
 restore(); levelOptions(); configureResource(); renderSituation(); renderCheckIns(); renderReports(); showView();
 window.addEventListener('hashchange', showView);
+$('#level-detail').addEventListener('click', event => {
+  const button = event.target.closest('[data-plan-level]');
+  if (!button) return;
+  responseLab.setOrigin(button.dataset.planLevel);
+  location.hash = 'response';
+  showView();
+  responseLab.focusSection('response-routes');
+});
 // Delegated handlers survive re-rendering, so renders never re-attach listeners.
 $('#level-map').addEventListener('click', event => {
   const button = event.target.closest('[data-level]');
@@ -244,6 +258,7 @@ $('#reset-button').addEventListener('click', () => {
   Object.assign(state, DEFAULTS);
   levels = getScenarioLevels(state.scenario); $('#scenario').value = state.scenario; $('#resource').value = state.resource; $('#scenario-note').hidden = true; $('#checkin-search').value = '';
   const persisted = commit([], []); configureResource(); renderSituation(); renderCheckIns(); renderReports();
+  responseLab?.reset();
   if (persisted) toast('Demo reset. Local records cleared.');
 });
 function confirmOfflineCache(worker) {
@@ -258,6 +273,23 @@ function confirmOfflineCache(worker) {
     worker.postMessage({ type: 'HOLLOW_CACHE_STATUS' }, [channel.port2]);
   });
 }
+responseLab = initResponseLab({
+  getScenario: () => state.scenario,
+  onScenario: scenario => {
+    $('#scenario').value = scenario;
+    $('#scenario').dispatchEvent(new Event('change'));
+  },
+  onCheckIn: ({ level, status, note }) => {
+    $('#checkin-level').value = level;
+    $('#checkin-form').querySelector(`input[name="status"][value="${status}"]`).checked = true;
+    $('#checkin-note').value = note;
+    location.hash = 'community';
+    showView();
+    $('#alias').focus();
+    toast(`${status === 'help' ? 'Help request' : 'Travel signal'} drafted. Add your call sign and save it locally, then export a relay packet to share.`);
+  },
+  download, toast,
+});
 async function refreshOfflineStatus() {
   if ('serviceWorker' in navigator) offlineReady = await confirmOfflineCache(navigator.serviceWorker.controller);
   updateConnection();
