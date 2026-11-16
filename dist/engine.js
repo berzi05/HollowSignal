@@ -99,8 +99,11 @@ function distribute(amount, caps, weights) {
     const shares = active.map(i => ({ i, exact: remaining * weights[i] / totalWeight }));
     for (const share of shares) { const grant = Math.floor(share.exact); allocated[share.i] += grant; remaining -= grant; }
     shares.sort((a, b) => (b.exact % 1) - (a.exact % 1) || a.i - b.i);
-    for (let j = 0; j < remaining; j++) allocated[shares[j].i]++;
-    remaining = 0;
+    // Mathematically fewer than shares.length units remain; bound the loop anyway so
+    // floating-point error can never index past the end. Any leftover is redistributed.
+    const extra = Math.min(remaining, shares.length);
+    for (let j = 0; j < extra; j++) allocated[shares[j].i]++;
+    remaining -= extra;
   }
   return allocated;
 }
@@ -132,12 +135,37 @@ export function allocateResource(levels, supply, resource = 'power') {
   };
 }
 
-const CHECK_IN_LIMIT = 200;
-const timestamp = value => {
-  const date = new Date(value);
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) || !Number.isFinite(date.getTime()) || date.toISOString() !== value) throw new TypeError('Check-in timestamp must be an ISO date.');
+const RECORD_LIMIT = 200;
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const RECORD_ID = /^[a-zA-Z0-9-]{8,80}$/;
+
+/** Accept only canonical `Date#toISOString()` output for a real calendar date. */
+export function validateTimestamp(value, label = 'Timestamp') {
+  const valid = typeof value === 'string' && ISO_TIMESTAMP.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
+  if (!valid) throw new TypeError(`${label} must be an ISO date.`);
   return value;
-};
+}
+
+/** Records are plain objects with a short, URL-safe ID. */
+export function validateRecordId(record, label = 'record') {
+  if (!record || typeof record !== 'object' || Array.isArray(record) || typeof record.id !== 'string' || !RECORD_ID.test(record.id)) throw new TypeError(`Invalid ${label} ID.`);
+}
+
+/**
+ * Validated, bounded last-write-wins by record ID. Equal timestamps use canonical lexical
+ * order of the validated record, so merging is deterministic and order-independent.
+ */
+export function mergeRecords(existing, incoming, validate, noun, limit = RECORD_LIMIT) {
+  if (!Array.isArray(existing) || !Array.isArray(incoming) || existing.length > limit || incoming.length > limit) throw new TypeError(`Import at most ${limit} ${noun} at a time.`);
+  const records = new Map();
+  for (const candidate of [...existing, ...incoming]) {
+    const record = validate(candidate);
+    const previous = records.get(record.id);
+    if (!previous || record.updatedAt > previous.updatedAt || (record.updatedAt === previous.updatedAt && JSON.stringify(record) > JSON.stringify(previous))) records.set(record.id, record);
+  }
+  return [...records.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).slice(0, limit);
+}
+
 function cleanText(value, label, max, required = false, multiline = false) {
   const controls = multiline ? /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u : /[\u0000-\u001f\u007f]/u;
   if (typeof value !== 'string' || value.length > max || controls.test(value)) throw new TypeError(`${label} must contain at most ${max} printable characters.`);
@@ -146,10 +174,10 @@ function cleanText(value, label, max, required = false, multiline = false) {
   return text;
 }
 function validateCheckIn(record) {
-  if (!record || typeof record !== 'object' || Array.isArray(record) || typeof record.id !== 'string' || !/^[a-zA-Z0-9-]{8,80}$/.test(record.id)) throw new TypeError('Invalid check-in ID.');
+  validateRecordId(record, 'check-in');
   if (!ids.has(record.level)) throw new TypeError('Unknown check-in level.');
   if (!['safe', 'help', 'moving'].includes(record.status)) throw new TypeError('Unknown check-in status.');
-  return { id: record.id, alias: cleanText(record.alias, 'Alias', 40, true), level: record.level, status: record.status, note: cleanText(record.note ?? '', 'Note', 180, false, true), updatedAt: timestamp(record.updatedAt) };
+  return { id: record.id, alias: cleanText(record.alias, 'Alias', 40, true), level: record.level, status: record.status, note: cleanText(record.note ?? '', 'Note', 180, false, true), updatedAt: validateTimestamp(record.updatedAt, 'Check-in timestamp') };
 }
 
 export function createCheckIn({ alias, level, status, note = '' } = {}, now = new Date().toISOString()) {
@@ -157,14 +185,6 @@ export function createCheckIn({ alias, level, status, note = '' } = {}, now = ne
   return validateCheckIn({ id: globalThis.crypto.randomUUID(), alias, level, status, note, updatedAt });
 }
 
-/** Validated, bounded last-write-wins by record ID. Equal timestamps use canonical lexical order. */
 export function mergeCheckIns(existing, incoming) {
-  if (!Array.isArray(existing) || !Array.isArray(incoming) || existing.length > CHECK_IN_LIMIT || incoming.length > CHECK_IN_LIMIT) throw new TypeError(`Import at most ${CHECK_IN_LIMIT} check-ins at a time.`);
-  const records = new Map();
-  for (const candidate of [...existing, ...incoming]) {
-    const record = validateCheckIn(candidate);
-    const previous = records.get(record.id);
-    if (!previous || record.updatedAt > previous.updatedAt || (record.updatedAt === previous.updatedAt && JSON.stringify(record) > JSON.stringify(previous))) records.set(record.id, record);
-  }
-  return [...records.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).slice(0, CHECK_IN_LIMIT);
+  return mergeRecords(existing, incoming, validateCheckIn, 'check-ins');
 }

@@ -1,27 +1,19 @@
 /** Manual, unauthenticated demo relay. Import validates all records before returning any changes. */
-import { LEVELS, mergeCheckIns } from './engine.js';
+import { LEVELS, mergeCheckIns, mergeRecords, validateRecordId, validateTimestamp } from './engine.js';
 
-const MAX_RECORDS = 200;
 const MAX_PACKET_BYTES = 256 * 1024;
 const LEVEL_IDS = new Set(LEVELS.map(level => level.id));
 const REPORT_TYPES = new Set(['water', 'power', 'air', 'heat', 'tunnel']);
 const encoder = new TextEncoder();
 
-function validateTimestamp(value) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) throw new TypeError('Report timestamp must be an ISO date.');
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime()) || date.toISOString() !== value) throw new TypeError('Report timestamp must be an ISO date.');
-  return value;
-}
-
 function validateReport(record) {
-  if (!record || typeof record !== 'object' || Array.isArray(record) || typeof record.id !== 'string' || !/^[a-zA-Z0-9-]{8,80}$/.test(record.id)) throw new TypeError('Invalid report ID.');
+  validateRecordId(record, 'report');
   if (!LEVEL_IDS.has(record.level)) throw new TypeError('Unknown report level.');
   if (!REPORT_TYPES.has(record.type)) throw new TypeError('Unknown report type.');
   if (typeof record.detail !== 'string' || record.detail.length > 240) throw new TypeError('Report details must contain 1–240 characters.');
   const detail = record.detail.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/gu, '').trim();
   if (!detail) throw new TypeError('Report details are required.');
-  return { id: record.id, level: record.level, type: record.type, detail, updatedAt: validateTimestamp(record.updatedAt) };
+  return { id: record.id, level: record.level, type: record.type, detail, updatedAt: validateTimestamp(record.updatedAt, 'Report timestamp') };
 }
 
 export function createReport({ level, type, detail } = {}, now = new Date().toISOString()) {
@@ -30,14 +22,7 @@ export function createReport({ level, type, detail } = {}, now = new Date().toIS
 
 /** Same last-write-wins and stable tie-break rule as check-ins, with a bounded newest-first result. */
 export function mergeReports(existing, incoming) {
-  if (!Array.isArray(existing) || !Array.isArray(incoming) || existing.length > MAX_RECORDS || incoming.length > MAX_RECORDS) throw new TypeError(`Import at most ${MAX_RECORDS} reports at a time.`);
-  const records = new Map();
-  for (const candidate of [...existing, ...incoming]) {
-    const record = validateReport(candidate);
-    const previous = records.get(record.id);
-    if (!previous || record.updatedAt > previous.updatedAt || (record.updatedAt === previous.updatedAt && JSON.stringify(record) > JSON.stringify(previous))) records.set(record.id, record);
-  }
-  return [...records.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)).slice(0, MAX_RECORDS);
+  return mergeRecords(existing, incoming, validateReport, 'reports');
 }
 
 export function parsePacket(text, existingCheckIns = [], existingReports = []) {
@@ -46,7 +31,7 @@ export function parsePacket(text, existingCheckIns = [], existingReports = []) {
   try { packet = JSON.parse(text); } catch { throw new TypeError('This is not a valid JSON relay packet.'); }
   const allowedKeys = new Set(['app', 'version', 'checkIns', 'reports', 'exportedAt']);
   if (!packet || typeof packet !== 'object' || Array.isArray(packet) || packet.app !== 'hollow-signal' || packet.version !== 1 || !Array.isArray(packet.checkIns) || !Array.isArray(packet.reports) || Object.keys(packet).some(key => !allowedKeys.has(key))) throw new TypeError('Expected a Hollow Signal version 1 relay packet.');
-  if (Object.hasOwn(packet, 'exportedAt')) validateTimestamp(packet.exportedAt);
+  if (Object.hasOwn(packet, 'exportedAt')) validateTimestamp(packet.exportedAt, 'Packet export time');
   // Both operations are pure; if either fails, the caller receives no partial result.
   const checkIns = mergeCheckIns(existingCheckIns, packet.checkIns);
   const reports = mergeReports(existingReports, packet.reports);

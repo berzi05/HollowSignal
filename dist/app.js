@@ -4,13 +4,28 @@ import { createReport, mergeReports, parsePacket, serializePacket } from './rela
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const esc = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const fmt = (n, digits = 0) => Number(n).toLocaleString('en-US', { maximumFractionDigits: digits });
+const numberFormats = new Map();
+const fmt = (n, digits = 0) => {
+  let format = numberFormats.get(digits);
+  if (!format) numberFormats.set(digits, format = new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }));
+  return format.format(Number(n));
+};
+const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const storageKey = 'hollow-signal-v1';
-const state = { scenario: 'baseline', selected: 'L20', resource: 'power', supply: 1140, checkIns: [], reports: [] };
+// Must match REVISION in sw.js (enforced by test/sw.test.js).
+const CACHE_REVISION = 'v3';
+const DEFAULTS = Object.freeze({ scenario: 'baseline', selected: 'L20', resource: 'power' });
+const state = { ...DEFAULTS, supply: 1140, checkIns: [], reports: [] };
+const VIEWS = {
+  overview: { heading: 'Keep the Hollow alive', description: 'Every level matters. See the risks. Share what we have. Stay connected.', crumb: 'OVERVIEW', title: 'Overview' },
+  resources: { heading: 'Enough to keep going', description: 'A transparent plan for sharing power, water, and food across every level.', crumb: 'RESOURCE ALLOCATION', title: 'Resource allocation' },
+  community: { heading: 'Let them know you’re here', description: 'A neighborhood relay for the moments when connection matters most.', crumb: 'COMMUNITY RELAY', title: 'Community relay' }
+};
 let levels = getScenarioLevels();
 let plan;
 let toastTimer;
 let offlineReady = false;
+let currentView;
 const scenarioNotes = {
   baseline: '',
   blackout: 'Geothermal outage simulated: power coverage drops 34 points from L08 down. Ventilation weakens and battery reserves shrink. Review the deepest levels first.',
@@ -24,8 +39,15 @@ function toast(message) {
   $('#toast').classList.add('visible');
   toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 5500);
 }
-function save() {
-  try { localStorage.setItem(storageKey, serializePacket(state.checkIns, state.reports)); return true; }
+/**
+ * Replace local records and persist them. Serialization runs first, so an oversized
+ * state throws before anything changes. Storage failure keeps the in-memory state.
+ */
+function commit(checkIns, reports) {
+  const text = serializePacket(checkIns, reports);
+  state.checkIns = checkIns;
+  state.reports = reports;
+  try { localStorage.setItem(storageKey, text); return true; }
   catch { toast('Browser storage is unavailable. Export a relay packet to keep your records.'); return false; }
 }
 function restore() {
@@ -42,22 +64,22 @@ function levelOptions() {
   $('#report-level').value = state.selected;
 }
 function showView() {
-  const requested = location.hash.slice(1) || 'overview';
-  const view = ['overview', 'resources', 'community'].includes(requested) ? requested : 'overview';
-  const headings = {
-    overview: ['Keep the Hollow alive', 'Every level matters. See the risks. Share what we have. Stay connected.'],
-    resources: ['Enough to keep going', 'A transparent plan for sharing power, water, and food across every level.'],
-    community: ['Let them know you’re here', 'A neighborhood relay for the moments when connection matters most.']
-  };
+  // Non-view hashes (e.g. the #main skip link) keep the current view instead of resetting it.
+  const requested = location.hash.slice(1);
+  const view = Object.hasOwn(VIEWS, requested) ? requested : currentView ?? 'overview';
+  const meta = VIEWS[view];
   $$('.view').forEach(el => { el.hidden = el.id !== `view-${view}`; });
   $$('[data-view]').forEach(el => {
     el.classList.toggle('active', el.dataset.view === view);
     if (el.dataset.view === view) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
   });
-  $('#page-title').innerHTML = `${headings[view][0]}<span>.</span>`;
-  $('#page-description').textContent = headings[view][1];
-  $('#breadcrumb-view').textContent = view === 'resources' ? 'RESOURCE ALLOCATION' : view === 'community' ? 'COMMUNITY RELAY' : 'OVERVIEW';
-  document.title = `${view === 'overview' ? 'Overview' : view === 'resources' ? 'Resource allocation' : 'Community relay'} — Hollow Signal`;
+  $('#page-title').innerHTML = `${meta.heading}<span>.</span>`;
+  $('#page-description').textContent = meta.description;
+  $('#breadcrumb-view').textContent = meta.crumb;
+  document.title = `${meta.title} — Hollow Signal`;
+  // Links near the bottom of one view should not open the next view mid-page.
+  if (currentView && currentView !== view) window.scrollTo(0, 0);
+  currentView = view;
 }
 function renderMetrics() {
   const s = getSummary(levels);
@@ -74,7 +96,6 @@ function renderMap() {
     const risk = assessLevel(l);
     return `<button class="level-row ${risk.severity} ${state.selected === l.id ? 'selected' : ''}" data-level="${l.id}" aria-pressed="${state.selected === l.id}" aria-label="Inspect ${l.id}, ${l.name}, ${risk.severity}"><span class="depth">−${l.depth}m</span><span class="shaft" aria-hidden="true"></span><span class="level-segment"><span class="level-id">${l.id}</span><span class="level-name">${l.name}</span><span class="level-power" aria-hidden="true">${Array.from({ length: 10 }, (_, i) => `<i class="${i < Math.round(l.power / 10) ? 'on' : ''}"></i>`).join('')}</span><span class="level-status">${risk.severity}</span><span class="level-arrow" aria-hidden="true">↗</span></span></button>`;
   }).join('');
-  $$('#level-map [data-level]').forEach(el => el.addEventListener('click', () => selectLevel(el.dataset.level)));
 }
 function selectLevel(id) {
   state.selected = id;
@@ -88,15 +109,15 @@ function renderAlerts() {
   // Show one of each hazard, so cascading failures remain visible.
   const chosen = [...new Set(warnings.map(w => w.type))].map(type => warnings.find(w => w.type === type)).slice(0, 3);
   $('#alert-count').textContent = warnings.length;
-  $('#alert-count').setAttribute('aria-label', `${warnings.length} warnings across all levels; showing three priority signals`);
+  $('#alert-count').setAttribute('aria-label', `${warnings.length} warnings across all levels; showing ${chosen.length} priority signal${chosen.length === 1 ? '' : 's'}`);
   const icons = { power: 'ϟ', air: '≈', water: '◈', heat: '♨' };
   $('#alerts').innerHTML = chosen.map(w => `<article class="alert ${w.severity}"><span class="alert-icon" aria-hidden="true">${icons[w.type]}</span><div><div class="alert-title"><h3>${w.title}</h3><span class="alert-level">${w.level.id}</span></div><p>${esc(w.detail)}</p><button class="alert-action" data-inspect="${w.level.id}">Inspect level & response <span>→</span></button></div></article>`).join('');
-  $$('[data-inspect]').forEach(el => el.addEventListener('click', () => { selectLevel(el.dataset.inspect); $('#level-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }));
 }
 function renderDetail() {
   const l = levels.find(l => l.id === state.selected);
   const r = assessLevel(l);
-  const stats = [['POWER COVERAGE', `${l.power}%`, `${fmt(r.blackoutMinutes)} min modeled reserve`], ['OXYGEN', `${l.air.toFixed(1)}%`, `${fmt(l.co2)} ppm CO₂`], ['TEMPERATURE', `${l.temp.toFixed(1)}°C`, l.temp >= 34 ? 'Critical heat signal' : 'Neighborhood sensor'], ['WATER INDEX', `${l.water}<small> / 100</small>`, l.water < 60 ? 'Testing required' : 'Synthetic sensor index']];
+  const reserve = r.blackoutMinutes === null ? 'No reserve draw at full supply' : `${fmt(r.blackoutMinutes)} min modeled reserve`;
+  const stats = [['POWER COVERAGE', `${l.power}%`, reserve], ['OXYGEN', `${l.air.toFixed(1)}%`, `${fmt(l.co2)} ppm CO₂`], ['TEMPERATURE', `${l.temp.toFixed(1)}°C`, l.temp >= 34 ? 'Critical heat signal' : 'Neighborhood sensor'], ['WATER INDEX', `${l.water}<small> / 100</small>`, l.water < 60 ? 'Testing required' : 'Synthetic sensor index']];
   $('#level-detail').innerHTML = `<div><div class="eyebrow muted">SELECTED NEIGHBORHOOD · ${l.id}</div><div class="detail-title"><h2>${l.name}</h2><span class="status-tag ${r.severity}">${r.severity}</span></div><p>${fmt(l.population)} residents · ${l.depth} m below surface</p></div><div class="detail-stats">${stats.map(s => `<div class="detail-stat"><span>${s[0]}</span><b>${s[1]}</b><p>${s[2]}</p></div>`).join('')}</div><div class="detail-actions"><strong>COMMUNITY RESPONSE</strong> &nbsp; ${r.warnings.length ? r.warnings.map(w => esc(w.action)).join(' ') : 'Keep monitoring local sensors and check that shared reserves are accessible.'}</div>`;
 }
 function configureResource() {
@@ -113,25 +134,26 @@ function renderAllocation() {
   const totalNeed = plan.allocations.reduce((sum, a) => sum + a.need, 0);
   const unit = RESOURCE_RULES[state.resource].unit;
   $('#supply-label').textContent = `${fmt(state.supply)} ${unit}`;
-  $('#allocation-summary').innerHTML = `<div class="plan-stat"><span>AVAILABLE SUPPLY</span><b>${fmt(state.supply)}<small>${unit}</small></b></div><div class="plan-stat"><span>ALLOCATED TO RESIDENTS</span><b>${fmt(plan.used, 1)}<small>${unit}</small></b></div><div class="plan-stat"><span>SECTOR DEMAND COVERED</span><b>${fmt(plan.used / totalNeed * 100, 1)}<small>%</small></b></div>${plan.essentialShortfall > 0 ? `<p class="plan-warning">Essential needs are short by ${fmt(plan.essentialShortfall, 1)} ${unit}. Every level receives the same proportion of its essential requirement.</p>` : `<p class="plan-warning" style="color:var(--green);background:#c7ef8a09">Essential shares covered. ${plan.unallocated > 0 ? `${fmt(plan.unallocated, 1)} ${unit} remain after all modeled demand is met.` : 'Remaining supply follows vulnerability and current hazard scores.'}</p>`}`;
+  $('#allocation-summary').innerHTML = `<div class="plan-stat"><span>AVAILABLE SUPPLY</span><b>${fmt(state.supply)}<small>${unit}</small></b></div><div class="plan-stat"><span>ALLOCATED TO RESIDENTS</span><b>${fmt(plan.used, 1)}<small>${unit}</small></b></div><div class="plan-stat"><span>SECTOR DEMAND COVERED</span><b>${fmt(plan.used / totalNeed * 100, 1)}<small>%</small></b></div>${plan.essentialShortfall > 0 ? `<p class="plan-warning">Essential needs are short by ${fmt(plan.essentialShortfall, 1)} ${unit}. Every level receives the same proportion of its essential requirement.</p>` : `<p class="plan-warning ok">Essential shares covered. ${plan.unallocated > 0 ? `${fmt(plan.unallocated, 1)} ${unit} remain after all modeled demand is met.` : 'Remaining supply follows vulnerability and current hazard scores.'}</p>`}`;
   $('#allocation-rows').innerHTML = plan.allocations.map(a => `<tr><td><b>${a.id} · ${a.name}</b><span>${fmt(levels.find(l => l.id === a.id).vulnerable)} vulnerable residents</span></td><td>${fmt(a.population)}</td><td>${fmt(a.essential, 1)} ${unit}</td><td>${fmt(a.allocated, 1)} ${unit}</td><td><div class="coverage"><div class="coverage-track"><i style="width:${a.coverage}%"></i></div><span>${fmt(a.coverage, 1)}%</span></div></td></tr>`).join('');
   const rule = RESOURCE_RULES[state.resource];
   $('#allocation-method').textContent = `Planning assumptions: ${rule.perPerson} ${unit} per resident, ${rule.period}. Essential share: ${fmt(rule.essentialFraction * 100, 1)}% of demand. Remaining-supply weight = population × (1 + 1.5 × vulnerable fraction + 0.5 × risk score / 100). Each level is capped at its modeled demand. Demo policy; residents must review real-world needs.`;
 }
 function timeLabel(iso) {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+  return dateFormat.format(new Date(iso));
 }
+// Split by code point so an emoji call sign never renders half a surrogate pair.
+const initials = alias => [...alias].slice(0, 2).join('').toUpperCase();
 function renderCheckIns() {
   const term = $('#checkin-search').value.trim().toLowerCase();
   const records = state.checkIns.filter(c => c.alias.toLowerCase().includes(term));
   $('#checkin-count').textContent = state.checkIns.length;
   const statuses = { safe: '● Safe', help: '＋ Needs help', moving: '↗ Moving' };
-  $('#checkin-list').innerHTML = records.length ? records.map(c => `<article class="checkin"><div class="avatar ${c.status}" aria-hidden="true">${esc(c.alias.slice(0, 2).toUpperCase())}</div><div class="checkin-body"><div class="checkin-name"><b>${esc(c.alias)}</b><span class="${c.status}">${statuses[c.status]}</span></div><small>${c.level} · ${esc(timeLabel(c.updatedAt))} · local copy</small>${c.note ? `<p>${esc(c.note)}</p>` : ''}</div></article>`).join('') : `<div class="empty-state"><div class="empty-icon" aria-hidden="true">◎</div><h3>${term ? 'No matching call signs' : 'The first signal starts with you.'}</h3><p>${term ? 'Try another call sign or import a relay packet from a neighbor.' : 'Save a check-in or import a neighbor’s relay packet. Every signal stays available on this device.'}</p></div>`;
+  $('#checkin-list').innerHTML = records.length ? records.map(c => `<article class="checkin"><div class="avatar ${c.status}" aria-hidden="true">${esc(initials(c.alias))}</div><div class="checkin-body"><div class="checkin-name"><b>${esc(c.alias)}</b><span class="${c.status}">${statuses[c.status]}</span></div><small>${c.level} · ${esc(timeLabel(c.updatedAt))} · local copy</small>${c.note ? `<p>${esc(c.note)}</p>` : ''}</div></article>`).join('') : `<div class="empty-state"><div class="empty-icon" aria-hidden="true">◎</div><h3>${term ? 'No matching call signs' : 'The first signal starts with you.'}</h3><p>${term ? 'Try another call sign or import a relay packet from a neighbor.' : 'Save a check-in or import a neighbor’s relay packet. Every signal stays available on this device.'}</p></div>`;
 }
 function renderReports() {
   const records = state.reports.slice(0, 3);
   $('#report-list').innerHTML = records.length ? records.map(r => `<div class="field-report"><span class="report-dot" aria-hidden="true"></span><div><p>${esc(r.detail)}</p><small>${r.level} · ${esc(r.type)} · ${esc(timeLabel(r.updatedAt))} · unverified</small></div></div>`).join('') : `<div class="field-empty"><p>No local reports yet. What you notice in your tunnel could help the next neighborhood.</p><button class="alert-action" id="first-report">Add a field report →</button></div>`;
-  $('#first-report')?.addEventListener('click', openReport);
 }
 function renderSituation() { renderMetrics(); renderMap(); renderAlerts(); renderDetail(); renderAllocation(); }
 function download(name, contents) {
@@ -147,6 +169,18 @@ function updateConnection() {
 
 restore(); levelOptions(); configureResource(); renderSituation(); renderCheckIns(); renderReports(); showView();
 window.addEventListener('hashchange', showView);
+// Delegated handlers survive re-rendering, so renders never re-attach listeners.
+$('#level-map').addEventListener('click', event => {
+  const button = event.target.closest('[data-level]');
+  if (button) selectLevel(button.dataset.level);
+});
+$('#alerts').addEventListener('click', event => {
+  const button = event.target.closest('[data-inspect]');
+  if (!button) return;
+  selectLevel(button.dataset.inspect);
+  $('#level-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+$('#report-list').addEventListener('click', event => { if (event.target.closest('#first-report')) openReport(); });
 $('#scenario').addEventListener('change', event => {
   state.scenario = event.target.value; levels = getScenarioLevels(state.scenario);
   $('#scenario-note').textContent = scenarioNotes[state.scenario];
@@ -169,10 +203,8 @@ $('#checkin-form').addEventListener('submit', event => {
       record.id = previous.id;
       if (previous.updatedAt === record.updatedAt) record.updatedAt = new Date(Date.parse(record.updatedAt) + 1).toISOString();
     }
-    const candidate = mergeCheckIns(state.checkIns, [record]);
-    serializePacket(candidate, state.reports);
-    state.checkIns = candidate;
-    const persisted = save(); renderCheckIns();
+    const persisted = commit(mergeCheckIns(state.checkIns, [record]), state.reports);
+    renderCheckIns();
     $('#checkin-note').value = '';
     if (persisted) toast('Check-in saved on this device. Export a relay packet to share it.');
   } catch (error) { toast(error.message); }
@@ -186,10 +218,8 @@ $('#report-form').addEventListener('submit', event => {
   event.preventDefault();
   try {
     const record = createReport(Object.fromEntries(new FormData(event.currentTarget)));
-    const candidate = mergeReports(state.reports, [record]);
-    serializePacket(state.checkIns, candidate);
-    state.reports = candidate;
-    const persisted = save(); renderReports(); $('#report-dialog').close(); $('#report-detail').value = '';
+    const persisted = commit(state.checkIns, mergeReports(state.reports, [record]));
+    renderReports(); $('#report-dialog').close(); $('#report-detail').value = '';
     if (persisted) toast('Unverified field report saved locally. Include it in your next relay packet.');
   } catch (error) { toast(error.message); }
 });
@@ -203,17 +233,17 @@ $('#import-file').addEventListener('change', async event => {
   try {
     if (file.size > 262144) throw new Error('Relay packets must be smaller than 256 KiB.');
     const next = parsePacket(await file.text(), state.checkIns, state.reports);
-    Object.assign(state, next);
-    const persisted = save(); renderCheckIns(); renderReports();
+    const persisted = commit(next.checkIns, next.reports);
+    renderCheckIns(); renderReports();
     if (persisted) toast(`Packet merged. ${state.checkIns.length} check-ins and ${state.reports.length} reports now stored locally.`);
   } catch (error) { toast(`Import rejected: ${error.message}`); }
   finally { event.target.value = ''; }
 });
 $('#reset-button').addEventListener('click', () => {
   if (!window.confirm('Clear all local check-ins and reports, and restore current conditions? Export a relay packet first if you want to keep them.')) return;
-  state.checkIns = []; state.reports = []; state.scenario = 'baseline'; state.selected = 'L20'; state.resource = 'power';
-  levels = getScenarioLevels(); $('#scenario').value = 'baseline'; $('#resource').value = 'power'; $('#scenario-note').hidden = true; $('#checkin-search').value = '';
-  const persisted = save(); configureResource(); renderSituation(); renderCheckIns(); renderReports();
+  Object.assign(state, DEFAULTS);
+  levels = getScenarioLevels(state.scenario); $('#scenario').value = state.scenario; $('#resource').value = state.resource; $('#scenario-note').hidden = true; $('#checkin-search').value = '';
+  const persisted = commit([], []); configureResource(); renderSituation(); renderCheckIns(); renderReports();
   if (persisted) toast('Demo reset. Local records cleared.');
 });
 function confirmOfflineCache(worker) {
@@ -223,7 +253,7 @@ function confirmOfflineCache(worker) {
     const timer = setTimeout(() => { channel.port1.close(); resolve(false); }, 2000);
     channel.port1.onmessage = ({ data }) => {
       clearTimeout(timer); channel.port1.close();
-      resolve(data?.type === 'HOLLOW_CACHE_STATUS' && data.revision === 'v2' && data.ready === true);
+      resolve(data?.type === 'HOLLOW_CACHE_STATUS' && data.revision === CACHE_REVISION && data.ready === true);
     };
     worker.postMessage({ type: 'HOLLOW_CACHE_STATUS' }, [channel.port2]);
   });

@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { realpathSync } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,6 +43,7 @@ export function resolveAssetPath(requestUrl, root = ROOT) {
 
 /** Local development server. Static assets only; no data leaves the browser. */
 export function createStaticServer(root = ROOT) {
+  let realRoot; // Resolved once on first successful request rather than on every request.
   return createServer(async (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
@@ -61,7 +63,8 @@ export function createStaticServer(root = ROOT) {
     }
     try {
       // Check resolved paths too: a symlink under dist must not expose another directory.
-      const [realRoot, actualPath] = await Promise.all([realpath(root), realpath(candidate)]);
+      realRoot ??= await realpath(root);
+      const actualPath = await realpath(candidate);
       if (!insideRoot(realRoot, actualPath) || !(await stat(actualPath)).isFile()) {
         response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
         response.end('Not found');
@@ -81,7 +84,17 @@ export function createStaticServer(root = ROOT) {
   });
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+/** True when this file is the process entry point, even if path spelling or case differs (Windows). */
+function isEntryPoint() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) {
   const port = Number(process.env.PORT || 3000);
   const host = process.env.HOST || '127.0.0.1';
   if (!Number.isInteger(port) || port < 1 || port > 65535) {

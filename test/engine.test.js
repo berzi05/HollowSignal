@@ -68,6 +68,15 @@ test('above essential floor, vulnerable neighborhoods receive higher coverage', 
   assert.equal(full.unallocated, 840);
 });
 
+test('allocator distributes every milli-unit across awkward weights without overshooting', () => {
+  const levels = Array.from({ length: 7 }, (_, i) => ({ ...LEVELS[0], id: `X${i}`, population: 997 + i * 13, vulnerable: i * 37 }));
+  for (const supply of [0.007, 1.333, 77.777, 333.333, 555.555]) {
+    const plan = allocateResource(levels, supply, 'power');
+    assert.ok(plan.allocations.every(row => row.allocated <= row.need));
+    assert.ok(Math.abs(plan.used - Math.min(supply, plan.allocations.reduce((t, r) => t + r.need, 0))) < 0.0011);
+  }
+});
+
 test('allocator rejects malformed input and has a defined empty result', () => {
   for (const value of [NaN, Infinity, -1, '500']) assert.throws(() => allocateResource(LEVELS, value), TypeError);
   assert.throws(() => allocateResource(LEVELS, 100, '__proto__'), TypeError);

@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source = await readFile(new URL('../dist/sw.js', import.meta.url), 'utf8');
 const scope = 'https://example.test/hollow/';
-const currentCache = `hollow-signal:${scope}:v2`;
+const currentCache = `hollow-signal:${scope}:v3`;
 const shell = ['/', '/index.html', '/styles.css', '/app.js', '/engine.js', '/relay.js', '/manifest.webmanifest', '/icon.svg', '/fonts/dm-sans.ttf', '/fonts/space-grotesk.ttf']
   .map(path => `${scope.slice(0, -1)}${path}`);
 
@@ -68,7 +68,7 @@ test('service worker installs the complete module graph under a subpath', async 
   assert.deepEqual(h.added, shell);
   assert.equal(h.lifecycle.skipped, true);
   assert.equal((await h.status()).ready, true);
-  assert.equal((await h.status()).revision, 'v2');
+  assert.equal((await h.status()).revision, 'v3');
 });
 
 test('offline status rejects missing, failed, old, and partially evicted caches', async () => {
@@ -92,6 +92,14 @@ test('offline status rejects missing, failed, old, and partially evicted caches'
   await missingFont.dispatch('install');
   missingFont.stores.get(currentCache).delete(`${scope}fonts/space-grotesk.ttf`);
   assert.equal((await missingFont.status()).ready, false, 'local fonts are required for complete offline assets');
+});
+
+test('app expects the same cache revision the worker reports', async () => {
+  const app = await readFile(new URL('../dist/app.js', import.meta.url), 'utf8');
+  const appRevision = app.match(/const CACHE_REVISION = '([^']+)'/)?.[1];
+  const workerRevision = source.match(/const REVISION = '([^']+)'/)?.[1];
+  assert.ok(workerRevision, 'sw.js must declare REVISION');
+  assert.equal(appRevision, workerRevision, 'bump CACHE_REVISION in app.js together with REVISION in sw.js');
 });
 
 test('activation removes old caches only for its own installation', async () => {

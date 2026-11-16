@@ -69,6 +69,7 @@ Resident input → Browser storage → JSON export → Manual transfer → Impor
 | `test/engine.test.js` | Deterministic behavior and edge-case tests |
 | `test/relay.test.js` | Packet validation, report handling, and merge tests |
 | `test/server.test.js` | Static-server behavior and path isolation tests |
+| `test/sw.test.js` | Service-worker install, cache status, activation, and fetch tests |
 | `server.mjs` | Local static development server |
 
 ### Risk assessment
