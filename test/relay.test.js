@@ -40,10 +40,10 @@ test('relay export round-trips both record kinds and deduplicates repeated impor
   const text = serializePacket([checkIn()], [report()]);
   const parsed = JSON.parse(text);
   assert.equal(parsed.app, 'hollow-signal');
-  assert.equal(parsed.version, 1);
+  assert.equal(parsed.version, 2);
   assert.ok(parsed.exportedAt.endsWith('Z'));
   assert.ok(text.includes('\n  "app"'));
-  assert.deepEqual(parsePacket(text), { checkIns: [checkIn()], reports: [report()] });
+  assert.deepEqual(parsePacket(text), { checkIns: [checkIn()], reports: [report()], healthReports: [], clinicUpdates: [], aidRequests: [] });
   assert.deepEqual(parsePacket(text, [checkIn()], [report()]), parsePacket(text));
 });
 
