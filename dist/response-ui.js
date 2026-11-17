@@ -27,7 +27,7 @@ function networkSvg(route, blocked, windows) {
   return `<svg viewBox="0 0 300 346" role="img" aria-label="Six-level tunnel network. ${blocked ? 'Lower shaft closed.' : 'Lower shaft open.'} ${route.found ? 'Candidate route: ' + route.path.join(' to ') : 'No candidate route meets the selected constraints.'}">${segments}${nodes}<text x="194" y="330" class="network-legend">STAIR BYPASS</text></svg>`;
 }
 
-export function initResponseLab({ getScenario, onScenario, onCheckIn, download, toast }) {
+export function initResponseLab({ getScenario, onScenario, onCheckIn, download, toast, onChange = () => {} }) {
   let state = defaults();
   let story = 0;
   let latest;
@@ -85,6 +85,7 @@ export function initResponseLab({ getScenario, onScenario, onCheckIn, download, 
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
+    onChange();
   }
 
   function draftCheckIn() {
@@ -141,6 +142,7 @@ export function initResponseLab({ getScenario, onScenario, onCheckIn, download, 
   syncControls(); render();
   return {
     render, focusSection,
+    getSituation() { return { ...latest.situation, closedEdges: state.blocked ? ['lower-shaft'] : [] }; },
     setOrigin(id) {
       if (!LEVELS.some(level => level.id === id)) throw new TypeError('Choose a known starting level.');
       state.origin = id; syncControls(); render();

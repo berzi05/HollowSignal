@@ -1,6 +1,7 @@
 import { LEVELS, RESOURCE_RULES, getScenarioLevels, assessLevel, getSummary, allocateResource, createCheckIn, mergeCheckIns } from './engine.js';
 import { createReport, mergeReports, parsePacket, serializePacket } from './relay.js';
 import { initResponseLab } from './response-ui.js';
+import { initHealthAid } from './health-ui.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -14,10 +15,11 @@ const fmt = (n, digits = 0) => {
 const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const storageKey = 'hollow-signal-v1';
 // Must match REVISION in sw.js (enforced by test/sw.test.js).
-const CACHE_REVISION = 'v6';
+const CACHE_REVISION = 'v7';
 const DEFAULTS = Object.freeze({ scenario: 'baseline', selected: 'L20', resource: 'power' });
-const state = { ...DEFAULTS, supply: 1140, checkIns: [], reports: [] };
+const state = { ...DEFAULTS, supply: 1140, checkIns: [], reports: [], healthReports: [], clinicUpdates: [], aidRequests: [] };
 const VIEWS = {
+  health: { heading: 'Care should reach every level', description: 'Review community health signals, find available aid, and carry requests to the people who can help.', crumb: 'HEALTH & AID', title: 'Health & aid' },
   response: { heading: 'Plan the next move', description: 'Review reserve time, share available power, and find a refuge route for your group.', crumb: 'CRISIS PLANNER', title: 'Crisis planner' },
   overview: { heading: 'Keep the Hollow alive', description: 'Every level matters. See the risks. Share what we have. Stay connected.', crumb: 'OVERVIEW', title: 'Overview' },
   resources: { heading: 'Enough to keep going', description: 'A transparent plan for sharing power, water, and food across every level.', crumb: 'SHARE SUPPLIES', title: 'Share supplies' },
@@ -29,6 +31,7 @@ let toastTimer;
 let offlineReady = false;
 let currentView;
 let responseLab;
+let healthLab;
 const scenarioNotes = {
   baseline: '',
   blackout: 'Geothermal outage simulated: power coverage drops 34 points from L08 down. Ventilation weakens and battery reserves shrink. Review the deepest levels first.',
@@ -46,10 +49,13 @@ function toast(message) {
  * Replace local records and persist them. Serialization runs first, so an oversized
  * state throws before anything changes. Storage failure keeps the in-memory state.
  */
-function commit(checkIns, reports) {
-  const text = serializePacket(checkIns, reports);
+function commit(checkIns, reports, health = state) {
+  const text = serializePacket(checkIns, reports, health);
   state.checkIns = checkIns;
   state.reports = reports;
+  state.healthReports = health.healthReports;
+  state.clinicUpdates = health.clinicUpdates;
+  state.aidRequests = health.aidRequests;
   try { localStorage.setItem(storageKey, text); return true; }
   catch { toast('Browser storage is unavailable. Export a relay packet to keep your records.'); return false; }
 }
@@ -83,6 +89,7 @@ function showView() {
   // Links near the bottom of one view should not open the next view mid-page.
   if (currentView && currentView !== view) window.scrollTo(0, 0);
   currentView = view;
+  if (view === 'health') healthLab?.render();
 }
 function renderMetrics() {
   const s = getSummary(levels);
@@ -122,7 +129,7 @@ function renderDetail() {
   const reserve = r.blackoutMinutes === null ? 'No reserve draw at full supply' : `${fmt(r.blackoutMinutes)} min modeled reserve`;
   const stats = [['POWER COVERAGE', `${l.power}%`, reserve], ['OXYGEN', `${l.air.toFixed(1)}%`, `${fmt(l.co2)} ppm CO₂`], ['TEMPERATURE', `${l.temp.toFixed(1)}°C`, l.temp >= 34 ? 'Critical heat signal' : 'Neighborhood sensor'], ['WATER INDEX', `${l.water}<small> / 100</small>`, l.water < 60 ? 'Testing required' : 'Synthetic sensor index']];
   $('#level-detail').innerHTML = `<div><div class="eyebrow muted">SELECTED NEIGHBORHOOD · ${l.id}</div><div class="detail-title"><h2>${l.name}</h2><span class="status-tag ${r.severity}">${r.severity}</span></div><p>${fmt(l.population)} residents · ${l.depth} m below surface</p></div><div class="detail-stats">${stats.map(s => `<div class="detail-stat"><span>${s[0]}</span><b>${s[1]}</b><p>${s[2]}</p></div>`).join('')}</div><div class="detail-actions"><strong>COMMUNITY RESPONSE</strong> &nbsp; ${r.warnings.length ? r.warnings.map(w => esc(w.action)).join(' ') : 'Keep monitoring local sensors and check that shared reserves are accessible.'}</div>`;
-  $('#level-detail').innerHTML += `<div class="detail-plan-action"><button class="button secondary compact" data-plan-level="${l.id}">Plan for ${l.id} →</button></div>`;
+  $('#level-detail').innerHTML += `<div class="detail-plan-action"><button class="button secondary compact" data-health-origin="${l.id}">Find aid for ${l.id} →</button><button class="button secondary compact" data-plan-level="${l.id}">Plan for ${l.id} →</button></div>`;
 }
 function configureResource() {
   const rule = RESOURCE_RULES[state.resource];
@@ -176,6 +183,8 @@ function updateConnection() {
 restore(); levelOptions(); configureResource(); renderSituation(); renderCheckIns(); renderReports(); showView();
 window.addEventListener('hashchange', showView);
 $('#level-detail').addEventListener('click', event => {
+  const aid = event.target.closest('[data-health-origin]');
+  if (aid) { healthLab.setOrigin(aid.dataset.healthOrigin); location.hash = 'health'; showView(); healthLab.focusSection('health-aid'); return; }
   const button = event.target.closest('[data-plan-level]');
   if (!button) return;
   responseLab.setOrigin(button.dataset.planLevel);
@@ -237,28 +246,30 @@ $('#report-form').addEventListener('submit', event => {
     if (persisted) toast('Unverified field report saved locally. Include it in your next relay packet.');
   } catch (error) { toast(error.message); }
 });
-$('#export-relay').addEventListener('click', () => {
-  try { download('hollow-relay.json', serializePacket(state.checkIns, state.reports)); toast('Relay packet exported. Share the file with a trusted neighbor.'); }
+function exportRelay() {
+  try { download('hollow-relay.json', serializePacket(state.checkIns, state.reports, state)); toast('Relay packet exported with check-ins, reports, health tallies, clinic snapshots, and aid requests.'); }
   catch (error) { toast(`Export failed: ${error.message}`); }
-});
+}
+$('#export-relay').addEventListener('click', exportRelay);
 $('#import-relay').addEventListener('click', () => $('#import-file').click());
 $('#import-file').addEventListener('change', async event => {
   const file = event.target.files[0]; if (!file) return;
   try {
     if (file.size > 262144) throw new Error('Relay packets must be smaller than 256 KiB.');
-    const next = parsePacket(await file.text(), state.checkIns, state.reports);
-    const persisted = commit(next.checkIns, next.reports);
-    renderCheckIns(); renderReports();
-    if (persisted) toast(`Packet merged. ${state.checkIns.length} check-ins and ${state.reports.length} reports now stored locally.`);
+    const next = parsePacket(await file.text(), state.checkIns, state.reports, state);
+    const persisted = commit(next.checkIns, next.reports, next);
+    renderCheckIns(); renderReports(); healthLab.render();
+    if (persisted) toast(`Packet merged. ${state.checkIns.length} check-ins, ${state.reports.length} reports, ${state.healthReports.length} tallies, ${state.clinicUpdates.length} clinic updates, and ${state.aidRequests.length} aid requests stored locally.`);
   } catch (error) { toast(`Import rejected: ${error.message}`); }
   finally { event.target.value = ''; }
 });
 $('#reset-button').addEventListener('click', () => {
-  if (!window.confirm('Clear all local check-ins and reports, and restore current conditions? Export a relay packet first if you want to keep them.')) return;
+  if (!window.confirm('Clear all local check-ins, reports, health tallies, clinic updates, and aid requests? Export a relay packet first if you want to keep them.')) return;
   Object.assign(state, DEFAULTS);
   levels = getScenarioLevels(state.scenario); $('#scenario').value = state.scenario; $('#resource').value = state.resource; $('#scenario-note').hidden = true; $('#checkin-search').value = '';
-  const persisted = commit([], []); configureResource(); renderSituation(); renderCheckIns(); renderReports();
+  const persisted = commit([], [], { healthReports: [], clinicUpdates: [], aidRequests: [] }); configureResource(); renderSituation(); renderCheckIns(); renderReports();
   responseLab?.reset();
+  healthLab?.reset();
   if (persisted) toast('Demo reset. Local records cleared.');
 });
 function confirmOfflineCache(worker) {
@@ -274,6 +285,7 @@ function confirmOfflineCache(worker) {
   });
 }
 responseLab = initResponseLab({
+  onChange: () => healthLab?.render(),
   getScenario: () => state.scenario,
   onScenario: scenario => {
     $('#scenario').value = scenario;
@@ -290,12 +302,18 @@ responseLab = initResponseLab({
   },
   download, toast,
 });
+healthLab = initHealthAid({
+  getRecords: () => state,
+  getSituation: () => responseLab.getSituation(),
+  onSave: patch => commit(state.checkIns, state.reports, { ...state, ...patch }),
+  toast, download: exportRelay,
+});
 async function refreshOfflineStatus() {
   if ('serviceWorker' in navigator) offlineReady = await confirmOfflineCache(navigator.serviceWorker.controller);
   updateConnection();
 }
 window.addEventListener('online', refreshOfflineStatus); window.addEventListener('offline', refreshOfflineStatus);
-window.addEventListener('focus', refreshOfflineStatus);
+window.addEventListener('focus', () => { refreshOfflineStatus(); healthLab.render(); });
 updateConnection();
 if ('serviceWorker' in navigator && window.isSecureContext) {
   navigator.serviceWorker.addEventListener('controllerchange', refreshOfflineStatus);
