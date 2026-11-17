@@ -1,22 +1,24 @@
 # Hollow Signal
 
-**A browser app that helps an underground neighborhood understand a crisis, share limited supplies, find refuge or care, and keep people in contact.**
+**Community survival coordination for the people living beneath a dead surface.**
 
-Built for the **Life underground** track. The app models one sector of the Hollow: six neighborhoods and 19,000 fictional residents. It runs online normally and can keep working offline after its application cache has installed.
+Built for the **Life underground** hackathon track, Hollow Signal connects early warnings, fair resource planning, refuge routes, care access, and community check-ins. It models six neighborhoods and 19,000 fictional residents in one sector of the Hollow.
 
-## What the app actually does
+The app works online and can keep working offline after its application cache installs. Its calculations and local records work without an API key or account; sharing between devices uses manually transferred relay files.
 
-| Page | What you can do | What the app gives you |
+## What you can do
+
+| Page | Purpose | Main features |
 | --- | --- | --- |
-| **Overview** | Choose a power, water, or heat scenario; select a neighborhood. | Population-weighted conditions, explained warnings, modeled reserve time, and a **Plan for this level** action. |
-| **Crisis planner** | Advance the clock, change the power budget, select a starting level and group size, close a tunnel, or require step-free access. | Projected conditions, a side-by-side allocation comparison, and a candidate refuge route with time, capacity, and hazard warnings. |
-| **Share supplies** | Choose power, water, or food and set the available amount. | Per-level allocations, essential shortfalls, coverage, unused supply, the policy formula, and a downloadable plan. |
-| **Health & aid** | Record or review daily respiratory tallies, update clinic capacity and stock, plan access to care, and save aid requests. | Explained increases, source and review labels, clinic shortages, constrained care/supply routes, and portable requests for local assistance. |
-| **Community** | Save a call-sign check-in, search for someone, record a field observation, or import/export a relay packet. | Persistent local records and a way to carry updates manually between devices. |
+| **Overview** | Understand what is happening in your neighborhood. | Power, air, heat, and water signals; explained warnings; reserve estimates; shortcuts to response planning and aid. |
+| **Crisis planner** | Explore how a failure develops and plan the next move. | A 0–120 minute projection, power-allocation comparison, tunnel closures, and refuge routes that account for group size and step-free access. |
+| **Share supplies** | Make a transparent plan for limited resources. | Power, water, and food allocations; essential shortfalls; demand coverage; unused supply; downloadable plans. |
+| **Health & aid** | Connect community health observations to available support. | Daily respiratory tallies, source and review labels, clinic capacity, supply shortages, care routes, and local-assistance requests. |
+| **Community** | Keep people in contact when the network is unreliable. | Call-sign check-ins, incident reports, search, and import/export of shared relay packets. |
 
-The planner connects to the rest of the app. Choosing **Plan for L20**, for example, opens the planner with L20 as the route origin. A candidate route can prepare a travel check-in. If no route meets the access and capacity constraints, it prepares a help request instead. You review the draft and save it yourself.
+The pages work together. A neighborhood on Overview can become the starting point for a refuge or care route. The Crisis planner's clock and tunnel closure also affect aid routes. Travel plans can become check-in drafts, while care plans can become aid requests carried through the same relay.
 
-## Start the app
+## Quick start
 
 Use **Node.js 22 or later**. From the repository directory:
 
@@ -24,39 +26,36 @@ Use **Node.js 22 or later**. From the repository directory:
 npm start
 ```
 
-Open **http://127.0.0.1:3000**. No API key, account, dependency installation, or build step is needed. All JavaScript, styles, fonts, and images are included in `dist/`.
+Open **http://127.0.0.1:3000**.
 
-The development server binds to localhost by default. It serves static assets; it does not receive resident records.
+No dependency installation or build step is needed. JavaScript, styles, fonts, and images are included in `dist/`. The development server binds to localhost and serves static files; it does not receive resident records.
 
-## Find what you need
+## Using the app
 
-The five main tabs have visible text labels on desktop, tablet, and phone layouts. Overview also has direct shortcuts for planning, supplies, health, and community signals. A selected neighborhood has both **Plan for this level** and **Find aid** actions.
+The five main tabs have visible labels on desktop, tablet, and phone layouts. Overview includes task shortcuts, and the planning pages provide section jumps.
 
-1. **Understand a problem:** choose a situation and inspect a level on Overview. The details explain which readings caused each warning.
-2. **Plan for that neighborhood:** use **Plan for this level**. In the Crisis planner, jump straight to **Reserves**, **Power allocation**, or **Refuge route**.
-3. **Check whether everyone can travel:** set the group size, mark a flooded shaft, and select **Need a step-free route** when appropriate. The planner either gives a candidate with explicit warnings or says no candidate meets the constraints.
-4. **Leave a signal:** choose **Draft a travel check-in** or **Draft a help request**, enter a call sign, review the message, and save. Export a relay packet to share the saved record.
-5. **Plan other supplies:** open Share supplies for water or food. Adjust the amount and export the allocation if you need a portable record.
+1. **Inspect a neighborhood.** Choose a power, water, or heat scenario and select a level on Overview. Read the warnings and their causes.
+2. **Plan a response.** Use **Plan for this level** to open the Crisis planner. Adjust time, available power, group size, tunnel access, and step-free requirements.
+3. **Share supplies.** Open Share supplies to compare power, water, or food allocations and export a plan.
+4. **Find care.** Use **Find aid** or open Health & aid. Add a daily tally or choose **Load sample health signals**, then select **Plan aid** beside a neighborhood.
+5. **Request assistance.** Review the proposed clinic and route. Choose **Mobile care / local assistance** when people cannot travel. Save the request and track its coordination status.
+6. **Carry the signal.** Save a check-in or field report in Community. Export a relay packet, transfer it to another device, and import it there.
 
-6. **Find care or request assistance:** open **Health & aid**. Load sample signals or add a daily tally, select **Plan aid** beside a neighborhood, then review the clinic route. Choose **Mobile care / local assistance** if people cannot travel. Save the request and export a relay packet.
+**Explore a blackout** starts a preset crisis scenario. All controls are also available independently.
 
-**Explore a blackout** is a shortcut to a preset scenario. You can also use every control directly.
+## How the features work
 
-## How the useful parts work
+### Early warnings and reserve planning
 
-### Warnings and reserve time
+Overview combines fictional power coverage, battery reserve, oxygen, CO₂, temperature, and water-quality readings. Each warning explains the triggering condition and a suggested community response.
 
-The Overview combines simulated power coverage, battery reserve, oxygen, CO₂, temperature, and water-quality readings. Rule-based warnings include an explanation and a suggested community response.
+Modeled reserve time is `reserve / (1 - power / 100)` when coverage is below 100%. Full coverage means no reserve draw. The Crisis planner projects up to 120 minutes ahead; after reserves run out, explicit demonstration rules model worsening ventilation and cooling. The assumptions are visible in the planner.
 
-Reserve time is calculated as `reserve / (1 - power / 100)` when supply coverage is below 100%. Full coverage means no modeled reserve draw.
+The planner's projected conditions and tunnel closure also apply to care routes. Overview and Share supplies retain the selected scenario's initial snapshot. Health tallies use UTC calendar days, independently of the rehearsal clock.
 
-The Crisis planner projects 0–120 minutes from the selected scenario. Once reserve power is exhausted, the model increases ventilation and cooling problems using rates shown in **Show the model, the limits, and what gets exported**.
+### Fair resource sharing
 
-**The Crisis planner clock and tunnel closure also apply to Health & aid routes.** Overview and Share supplies retain the initial snapshot of the selected scenario. Health tallies use actual UTC calendar days, independently of the fictional rehearsal clock.
-
-### Resource sharing
-
-The community allocation gives every level a proportional essential share first. When supply exceeds that floor, remaining supply follows population, vulnerability, and current hazards, capped at each level's modeled demand.
+Every level receives a proportional essential share first. When supply exceeds that floor, the remainder follows population, vulnerability, and current hazards, capped at each level's modeled demand.
 
 | Resource | Modeled full demand per resident | Essential share |
 | --- | --- | --- |
@@ -64,95 +63,98 @@ The community allocation gives every level a proportional essential share first.
 | Water | 3 liters per day | Two thirds |
 | Food | 1 ration per day | 70% |
 
-The planner compares power allocation against a fictional policy that fills upper levels first. Both policies use exactly the same budget.
+The Crisis planner compares this community policy with a fictional policy that fills upper-level demand first. Both receive the same budget. At the preset 1,000 kW budget, deep-level essential coverage is approximately **57%** under upper-level-first allocation and **100%** under community allocation. Lower budgets expose the remaining shortfall.
 
-For example, at the preset 1,000 kW budget, upper-level-first allocation covers about **57%** of deep-level essential demand; the community policy covers **100%**. Reducing the budget makes the shortfall visible. These percentages describe fictional planning requirements, not lives saved or supplies actually delivered.
+Allocations show what is assigned, what remains unused, and which needs are unmet. These are planning figures, not supplies delivered or lives saved.
 
-### Refuge routing
+### Refuge routes and accessible movement
 
-The route search considers tunnel walking times, current modeled hazards, closures, step-free access, and space for the entire group.
+Routes account for walking time, modeled hazards, tunnel closures, step-free access, and space for the whole group. The search removes closed or inaccessible connections, rejects destinations with critical readings, and selects the reachable refuge with the lowest weighted travel cost:
 
-It removes closed or inaccessible connections, rejects critical destination readings, and chooses the reachable refuge with the lowest modeled travel cost: `walking minutes × (1 + destination risk score / 100)`.
+`walking minutes × (1 + destination risk score / 100)`
 
-A flooded lower shaft can leave only a stair bypass from L20. Requiring a step-free route then produces **No viable candidate**. The app never silently drops the access requirement.
+For example, flooding the lower shaft can leave only a stair bypass from L20. Requiring step-free access then produces **No viable candidate** and a help-request draft.
 
-Critical intermediate levels and travel longer than the origin's remaining reserve are flagged. Capacity is a fictional snapshot; the route does not reserve space or certify safe passage.
+Critical intermediate levels and travel beyond the origin's remaining reserve are flagged. Capacity is a snapshot; a route does not reserve space or certify safe passage.
 
-### Community health signals — question 9
+### Community health signals
 
-Health & aid compares one reconciled respiratory-symptom tally per neighborhood per UTC day. Each tally records the number reporting symptoms, the number observed, its source, a review state, notes, and an update timestamp. It stores no individual medical profiles.
+Health & aid compares one reconciled respiratory-symptom tally per neighborhood per UTC day. A tally contains the number reporting symptoms, the number observed, a source, review status, notes, and an update timestamp. It contains no individual medical profile.
 
-The transparent **demo review rule** flags at least five reports with a reporting rate at least twice the previous day's rate and an actual increase. Comparing rates avoids flagging an increase caused only by observing more people. A zero baseline is handled without dividing by zero; missing, excluded, old, or future-dated observations do not become zero illness. Incomplete days and different sampling groups can still distort comparisons. This is an attention signal, not a validated outbreak detector or an estimate of population prevalence.
+The demo flags **at least five reports and a reporting rate at least twice the prior day's rate, with an actual increase**. Comparing rates accounts for changes in the number of people observed. Missing, excluded, old, or future-dated observations remain unknown rather than becoming zero illness. Incomplete days and different sampling groups can still distort the comparison.
 
-**Unreviewed**, **Reviewed locally**, and **Excluded** are separate evidence states. Reviewing requires a note and does not confirm disease or authenticate the reviewer. The evidence drawer exposes sources, dates, and notes. One stable record ID per level and day prevents repeated relay imports from adding the same count twice; correct a daily total rather than adding overlapping groups. The latest update wins, with deterministic conflict handling. Earlier versions are not an audit history.
+Evidence is labeled **Unreviewed**, **Reviewed locally**, or **Excluded**. Reviewing or excluding a tally requires a note. Sources and notes remain inspectable; local review does not authenticate a reporter or confirm an outbreak.
 
-**Load sample health signals** adds fictional L20, L16, and L08 observations without replacing existing tallies. L20 starts at 4/80 on the prior day and 18/80 today, giving a clear signal to review. Sample dates use the current UTC day; saved samples naturally age out.
+Each neighborhood/date pair has one record. Updating it replaces the tally, and repeated imports do not add its count twice. Reconcile overlapping groups before updating. The latest update wins, with deterministic conflict handling; earlier versions are not retained as an audit history.
 
-### Care access and supply coordination — question 10
+**Load sample health signals** adds fictional observations for L20, L16, and L08 without replacing existing tallies. Samples use the current UTC day and naturally age out.
 
-Four fictional clinics show open/closed state, available care places, masks, and first-aid kits. Update a snapshot with its source and observation time. Submitted snapshots older than six hours or observed in the future are excluded from route candidates; a stale update never silently falls back to the seed's availability. Untouched seeds remain explicitly labeled simulated snapshots.
+### Care access and aid coordination
 
-The aid planner uses the Crisis planner's current scenario, projected time, and tunnel closure. It checks the whole group's needs, step-free access, destination hazards, and the lowest weighted route cost. A care visit requires sufficient care places. A supply request requires sufficient stock, using one mask or kit per person as a fictional logistics unit, not clinical guidance. Critical intermediate levels and travel beyond reserve time remain visible warnings.
+Four fictional clinics show open/closed state, available care places, masks, and first-aid kits. Clinic updates include a source and observation time. Submitted snapshots older than six hours or observed in the future are excluded from route candidates. A stale update does not fall back to the seed's availability; untouched seeds remain labeled simulated snapshots.
 
-If no clinic qualifies, the app offers a local-assistance request. **Mobile care / local assistance** explicitly requests help at the origin without suggesting travel. Saved requests retain their need, group size, proposed clinic/route, scenario, rehearsal time, access constraints, and closure. Track **Requested → Coordinating → Reported complete**, then relay the status update. These are self-reported coordination states, not dispatch or delivery confirmations. Planning and saving never consume or reserve inventory.
+The aid planner shares the Crisis planner's scenario, projected time, and tunnel closure. It checks access requirements, destination hazards, and availability for the whole group. Care visits require enough care places. Supply plans require enough stock, using one mask or kit per person as a fictional logistics unit, not a treatment recommendation.
 
-This addresses the **logistics portion of question 10**: locating care and supplies and coordinating assistance for people who cannot reach it. It does not provide diagnosis, prescriptions, medication dosing, remote clinicians, or actual treatment.
+When no clinic qualifies, the app offers a local-assistance request. **Mobile care / local assistance** requests help at the origin without suggesting travel.
 
-### Check-ins, reports, and manual relay
+Saved requests retain the need, group size, proposed clinic and route when available, and planning context. Track **Requested → Coordinating → Reported complete**, then export the update. These are self-reported states; saving a request does not reserve stock, dispatch a team, or confirm delivery.
 
-- A check-in stores a call sign, level, safe/help/moving status, optional message, and timestamp.
-- Updating the same local call sign updates its record.
-- Field reports store unverified observations about water, power, air, heat, or tunnels. They do not automatically alter sensor readings or close a route.
-- Import validates the whole packet before accepting changes. Records merge by ID and timestamp, with deterministic conflict handling and a 200-record limit per kind.
-- New exports use relay **version 2**, including health tallies, clinic snapshots, and aid requests. Version 1 packets and existing browser records still import without erasing health data. Older app versions cannot import version 2. The whole merged state must fit the 256 KiB packet limit before any data is accepted.
-- Export/import is manual: someone must carry or send the file. There is no automatic radio mesh, delivery acknowledgment, or emergency dispatch.
+### Check-ins and community relay
 
-## What is saved or exported
+Check-ins store a call sign, level, safe/help/moving status, optional message, and timestamp. Updating the same local call sign updates its record. Field reports capture unverified observations about water, power, air, heat, or tunnels; they do not automatically change sensor readings or route closures.
+
+Relay packets carry check-ins, field reports, health tallies, clinic snapshots, and aid requests. Import validates the whole packet before accepting changes. Records merge by ID and timestamp, with deterministic conflict handling and a 200-record limit per kind. The merged state must fit the **256 KiB** packet limit.
+
+New exports use **version 2**. Version 1 packets and existing browser records still import without erasing health data; older app versions cannot import version 2.
+
+Someone must carry or send the file to another device. There is no automatic radio mesh, delivery acknowledgment, or emergency dispatch.
+
+## Storage, sharing, and offline use
 
 | Item | Where it lives | How to share it |
 | --- | --- | --- |
-| Saved check-ins, incident reports, health tallies, clinic updates, and aid requests | This browser's local storage | Export/import a **relay packet** in Community. |
-| Resource allocation | Recalculated in memory | Use **Export plan** in Share supplies. |
-| Current care/supply candidate | Recalculated in memory | Save an **aid request**, then export a relay packet in Health & aid or Community. |
-| Crisis projection and route | Recalculated in memory | Use **Export response brief** in the Crisis planner. |
-| Application assets | Browser service-worker cache after installation | Reload offline after **Offline cache ready** appears. |
+| Check-ins, incident reports, health tallies, clinic updates, and aid requests | This browser's local storage | Export a relay packet in Community or Health & aid; import it in Community. |
+| Resource allocation | Recalculated in memory | **Export plan** in Share supplies. |
+| Current care or supply candidate | Recalculated in memory | Save an aid request, then export a relay packet. |
+| Crisis projection and refuge route | Recalculated in memory | **Export response brief** in the Crisis planner. |
+| Application assets | Browser service-worker cache | Reload offline after **Offline cache ready** appears. |
 
-A response brief contains the exact scenario, clock, budget, route constraints, assumptions, allocations, and route result. It and an allocation plan are planning documents; neither is an importable relay packet.
+A response brief includes the scenario, clock, budget, constraints, assumptions, allocations, and route result. Response briefs and allocation plans are planning documents; they are not importable relay packets.
 
-The availability indicator is visible on every page, including mobile. Offline caching needs a successful first visit on HTTPS or localhost. Local records are not a backup. **Clear local data** asks for confirmation before removing records and resetting the scenario.
+Offline caching requires a successful first visit on HTTPS or localhost. The availability indicator appears on every page. Local records are not a backup: export what you want to keep. **Clear local data** asks for confirmation before removing records and resetting the scenario.
 
 ## Project structure
 
 | File | Responsibility |
 | --- | --- |
-| `dist/index.html` | Application pages, forms, navigation, and accessible labels |
+| `dist/index.html` | Pages, forms, navigation, and accessible labels |
 | `dist/app.js` | Navigation, rendering, local storage, and relay interactions |
 | `dist/engine.js` | Scenario readings, risk rules, resource allocation, and check-in validation |
-| `dist/crisis.js` | Time projection, policy comparison, constrained route search, and response briefs |
+| `dist/crisis.js` | Time projection, policy comparison, route search, and response briefs |
 | `dist/response-ui.js` | Planner controls and travel/help drafts |
-| `dist/health.js` | Daily health signal rules, clinic freshness, aid routing, and record validation |
-| `dist/health-ui.js` | Health forms, evidence review, clinic snapshots, and the aid queue |
+| `dist/health.js` | Health signal rules, clinic freshness, aid routing, and validation |
+| `dist/health-ui.js` | Health forms, evidence review, clinic updates, and aid requests |
 | `dist/relay.js` | Field reports, packet validation, and deterministic merges |
 | `dist/styles.css`, `dist/response.css`, `dist/health.css` | Responsive presentation |
 | `dist/sw.js` | Versioned offline shell and cache-readiness checks |
 | `server.mjs` | Local static server with path isolation |
-| `test/` | Model, navigation, integration, relay, server, and offline-asset tests |
+| `test/` | Model, integration, navigation, relay, server, and offline-asset tests |
 
-## Check the code
+## Validation
 
 ```sh
 npm run check
 ```
 
-This runs syntax checks and the Node test suite. Tests cover allocation conservation, cascade behavior, blocked and inaccessible routes, refuge capacity, planner-to-check-in integration, browser-history handling, rate comparisons, tally deduplication, clinic freshness and stock, care access constraints, health-to-aid integration, legacy packet migration, atomic import validation, and the offline dependency graph.
+Runs syntax checks and the Node test suite. Coverage includes allocation conservation, crisis projections, inaccessible routes, capacity and stock constraints, health trends, duplicate imports, stale clinic data, legacy packet migration, navigation, and the offline dependency graph.
 
-## Scope and limits
+## Prototype scope
 
-This is a functional prototype using fictional environmental data, populations, capacities, and tunnel times. It has no live sensors, validated forecasts, supply-control hardware, refuge reservations, medical diagnosis, or dispatch service.
+Hollow Signal uses fictional environmental readings, populations, clinic and refuge capacities, and tunnel times. It has no live sensors, validated forecasts, supply-control hardware, reservations, or dispatch service.
 
-The app's warnings and routes support exploring a scenario; they are not real-world safety instructions. Water scores do not establish potability. Browser records and exported files are not encrypted or authenticated; use aliases and fictional details.
+Health features support observation and care logistics. They do not diagnose illness, confirm outbreaks, prescribe medication, provide dosing, connect remote clinicians, or deliver treatment. Water scores cannot establish potability, and modeled routes are not real-world safety instructions.
 
-A real deployment needs calibrated sensors, current capacity data, verified routes, secure messaging, reliable transport, and residents' oversight of allocation policy.
+Browser records and exported files are **unencrypted and unauthenticated**. Use aliases and fictional aggregate data. A real deployment would need calibrated sensors, verified routes and capacity, secure communication, reliable transport, and residents' oversight of allocation policy.
 
 ## License
 
