@@ -123,6 +123,10 @@ A response brief includes the scenario, clock, budget, constraints, assumptions,
 
 Offline caching requires a successful first visit on HTTPS or localhost. The availability indicator appears on every page. Local records are not a backup: export what you want to keep. **Clear local data** asks for confirmation before removing records and resetting the scenario.
 
+The app checks for updates when opened, when you return to the tab, and when the connection comes back. **Check for updates** also runs a check immediately. Once a newer offline cache is complete, **Reload update** appears. Save unfinished forms before reloading; records saved in browser storage remain intact.
+
+If an older cached page has no update controls, use **Ctrl + Shift + R** once. For local development, run the server from the checkout you updated: pushing to GitHub does not update other folders on your computer.
+
 ## Project structure
 
 | File | Responsibility |
@@ -137,6 +141,7 @@ Offline caching requires a successful first visit on HTTPS or localhost. The ava
 | `dist/relay.js` | Field reports, packet validation, and deterministic merges |
 | `dist/styles.css`, `dist/response.css`, `dist/health.css` | Responsive presentation |
 | `dist/sw.js` | Versioned offline shell and cache-readiness checks |
+| `dist/updates.js` | Update checks and detection of a complete newer offline cache |
 | `server.mjs` | Local static server with path isolation |
 | `test/` | Model, integration, navigation, relay, server, and offline-asset tests |
 

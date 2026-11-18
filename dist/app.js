@@ -2,6 +2,7 @@ import { LEVELS, RESOURCE_RULES, getScenarioLevels, assessLevel, getSummary, all
 import { createReport, mergeReports, parsePacket, serializePacket } from './relay.js';
 import { initResponseLab } from './response-ui.js';
 import { initHealthAid } from './health-ui.js';
+import { createUpdateMonitor } from './updates.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -15,7 +16,7 @@ const fmt = (n, digits = 0) => {
 const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const storageKey = 'hollow-signal-v1';
 // Must match REVISION in sw.js (enforced by test/sw.test.js).
-const CACHE_REVISION = 'v7';
+const CACHE_REVISION = 'v8';
 const DEFAULTS = Object.freeze({ scenario: 'baseline', selected: 'L20', resource: 'power' });
 const state = { ...DEFAULTS, supply: 1140, checkIns: [], reports: [], healthReports: [], clinicUpdates: [], aidRequests: [] };
 const VIEWS = {
@@ -29,6 +30,8 @@ let levels = getScenarioLevels();
 let plan;
 let toastTimer;
 let offlineReady = false;
+let updateAvailable = false;
+let updateMonitor;
 let currentView;
 let responseLab;
 let healthLab;
@@ -175,7 +178,7 @@ function download(name, contents) {
 }
 function openReport() { $('#report-level').value = state.selected; $('#report-dialog').showModal(); }
 function updateConnection() {
-  const status = offlineReady ? (navigator.onLine ? 'Offline cache ready' : 'Offline · cache ready') : (navigator.onLine ? 'Local relay available' : 'Offline · cache unverified');
+  const status = updateAvailable ? 'Update ready · reload when you’re ready' : offlineReady ? (navigator.onLine ? 'Offline cache ready' : 'Offline · cache ready') : (navigator.onLine ? 'Local relay available' : 'Offline · cache unverified');
   $('#offline-status').textContent = status;
   $('#connection-status').textContent = status;
 }
@@ -272,18 +275,6 @@ $('#reset-button').addEventListener('click', () => {
   healthLab?.reset();
   if (persisted) toast('Demo reset. Local records cleared.');
 });
-function confirmOfflineCache(worker) {
-  return new Promise(resolve => {
-    if (!worker) return resolve(false);
-    const channel = new MessageChannel();
-    const timer = setTimeout(() => { channel.port1.close(); resolve(false); }, 2000);
-    channel.port1.onmessage = ({ data }) => {
-      clearTimeout(timer); channel.port1.close();
-      resolve(data?.type === 'HOLLOW_CACHE_STATUS' && data.revision === CACHE_REVISION && data.ready === true);
-    };
-    worker.postMessage({ type: 'HOLLOW_CACHE_STATUS' }, [channel.port2]);
-  });
-}
 responseLab = initResponseLab({
   onChange: () => healthLab?.render(),
   getScenario: () => state.scenario,
@@ -308,17 +299,35 @@ healthLab = initHealthAid({
   onSave: patch => commit(state.checkIns, state.reports, { ...state, ...patch }),
   toast, download: exportRelay,
 });
-async function refreshOfflineStatus() {
-  if ('serviceWorker' in navigator) offlineReady = await confirmOfflineCache(navigator.serviceWorker.controller);
-  updateConnection();
-}
-window.addEventListener('online', refreshOfflineStatus); window.addEventListener('offline', refreshOfflineStatus);
-window.addEventListener('focus', () => { refreshOfflineStatus(); healthLab.render(); });
+window.addEventListener('online', () => { updateConnection(); updateMonitor?.check({ force: true }); });
+window.addEventListener('offline', () => { updateConnection(); updateMonitor?.refresh(); });
+window.addEventListener('focus', () => { updateMonitor?.check(); healthLab.render(); });
 updateConnection();
 if ('serviceWorker' in navigator && window.isSecureContext) {
-  navigator.serviceWorker.addEventListener('controllerchange', refreshOfflineStatus);
-  navigator.serviceWorker.register('./sw.js').then(() => navigator.serviceWorker.ready).then(async registration => {
-    offlineReady = await confirmOfflineCache(registration.active);
-    updateConnection();
-  }).catch(() => { offlineReady = false; updateConnection(); });
+  $('#check-updates').hidden = false;
+  updateMonitor = createUpdateMonitor({
+    serviceWorker: navigator.serviceWorker, revision: CACHE_REVISION,
+    onStatus: ready => { offlineReady = ready; updateConnection(); },
+    onUpdate: available => { updateAvailable = available; $('#reload-update').hidden = !available; updateConnection(); },
+  });
 }
+$('#check-updates').addEventListener('click', async () => {
+  if (!updateMonitor) return;
+  $('#check-updates').disabled = true;
+  try {
+    const result = await updateMonitor.check({ force: true });
+    const messages = {
+      available: 'An update is ready. Save unfinished forms, then choose Reload update.',
+      installing: 'Downloading the update. Reload update will appear when it is ready.',
+      current: 'You’re using the latest available version.',
+      offline: 'You’re offline. Update checks will resume when you reconnect.',
+      unavailable: 'Could not reach the local server or website. Your saved records are unchanged.',
+      unverified: 'The offline cache is not ready yet. Keep this tab open while it installs.',
+    };
+    toast(messages[result] ?? 'Update check complete.');
+  } finally { $('#check-updates').disabled = false; }
+});
+$('#reload-update').addEventListener('click', async () => {
+  await updateMonitor?.refresh();
+  if (updateAvailable && window.confirm('Reload the updated app? Records saved in browser storage are kept. Save any unfinished forms before continuing.')) location.reload();
+});

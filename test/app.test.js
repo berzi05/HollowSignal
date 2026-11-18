@@ -6,13 +6,14 @@ import * as engine from '../dist/engine.js';
 import * as relay from '../dist/relay.js';
 import * as crisis from '../dist/crisis.js';
 import * as health from '../dist/health.js';
+import { createUpdateMonitor } from '../dist/updates.js';
 
 const source = await readFile(new URL('../dist/app.js', import.meta.url), 'utf8');
 const responseSource = await readFile(new URL('../dist/response-ui.js', import.meta.url), 'utf8');
 
 const healthSource = await readFile(new URL('../dist/health-ui.js', import.meta.url), 'utf8');
 
-function harness(initialHash = '', initialRecords) {
+function harness(initialHash = '', initialRecords, options = {}) {
   const handlers = new Map();
   const elements = new Map();
   const saved = new Map(initialRecords ? [['hollow-signal-v1', initialRecords]] : []);
@@ -24,9 +25,11 @@ function harness(initialHash = '', initialRecords) {
     removeAttribute(name) { delete this[name]; },
   }));
   let hash = initialHash;
+  let reloads = 0;
   const location = {
     get hash() { return hash; },
     set hash(value) { hash = value && !value.startsWith('#') ? '#' + value : value; },
+    reload() { reloads++; },
   };
   const document = {
     title: '',
@@ -34,7 +37,7 @@ function harness(initialHash = '', initialRecords) {
       if (!elements.has(selector)) elements.set(selector, {
         value: '', checked: false, listeners: new Map(),
         addEventListener(name, handler) { this.listeners.set(name, handler); },
-        dispatchEvent(event) { this.listeners.get(event.type)?.({ ...event, target: this, currentTarget: this, preventDefault() {} }); },
+        dispatchEvent(event) { return this.listeners.get(event.type)?.({ ...event, target: this, currentTarget: this, preventDefault() {} }); },
         querySelector: selector => document.querySelector(selector),
         focus() { this.focused = true; },
         scrollIntoView() { this.scrolled = true; },
@@ -52,7 +55,7 @@ function harness(initialHash = '', initialRecords) {
   // Run the actual app and its hashchange listener with a minimal DOM.
   // Supply the real modules through the VM context instead of ESM imports.
   const context = vm.createContext({
-    ...engine, ...relay, ...crisis, ...health, document, location,
+    ...engine, ...relay, ...crisis, ...health, createUpdateMonitor, document, location,
     Event: class { constructor(type) { this.type = type; } },
     FormData: class {
       *[Symbol.iterator]() {
@@ -63,8 +66,8 @@ function harness(initialHash = '', initialRecords) {
       }
     },
     localStorage: { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) },
-    navigator: { onLine: true },
-    window: { addEventListener: (name, handler) => handlers.set(name, handler), scrollTo() {}, confirm: () => true },
+    navigator: { onLine: true, ...(options.serviceWorker ? { serviceWorker: options.serviceWorker } : {}) },
+    window: { isSecureContext: Boolean(options.serviceWorker), addEventListener: (name, handler) => handlers.set(name, handler), scrollTo() {}, confirm: () => options.confirm !== false },
     setTimeout: () => 0, clearTimeout() {},
   });
   context.initResponseLab = vm.runInContext('(() => {' + responseSource.replace(/^import .*;\r?\n/gm, '').replace('export function initResponseLab', 'function initResponseLab') + '; return initResponseLab; })()', context);
@@ -75,13 +78,15 @@ function harness(initialHash = '', initialRecords) {
     fire(selector, type, changes = {}) {
       const target = document.querySelector(selector);
       Object.assign(target, changes);
-      target.dispatchEvent({ type });
+      return target.dispatchEvent({ type });
     },
     records() { return JSON.parse(saved.get('hollow-signal-v1')); },
     navigate(hash) { location.hash = hash; handlers.get('hashchange')(); },
     visible() { return panels.filter(panel => !panel.hidden).map(panel => panel.id); },
     active() { return links.filter(link => link['aria-current'] === 'page').map(link => link.dataset.view); },
     title() { return document.title; },
+    updatesReady: () => vm.runInContext('updateMonitor?.ready', context),
+    reloads: () => reloads,
   };
 }
 
@@ -209,4 +214,33 @@ test('overview find-aid action carries the neighborhood and focuses care plannin
   assert.deepEqual(app.visible(), ['view-health']);
   assert.equal(app.get('#aid-origin').value, 'L16');
   assert.equal(app.get('#health-aid').focused, true);
+});
+
+test('a newer cached version shows a reload control without losing drafts or saved records', async () => {
+  const handlers = new Map();
+  const worker = revision => ({ postMessage(message, ports) { ports[0].postMessage({ type: message.type, revision, ready: true }); } });
+  const serviceWorker = {
+    controller: worker('v8'),
+    addEventListener: (name, handler) => handlers.set(name, handler),
+    register: async () => ({ update: async () => {} }),
+  };
+  const options = { serviceWorker, confirm: false };
+  const app = harness('#community', undefined, options);
+  await app.updatesReady();
+  app.get('#alias').value = 'Lantern';
+  app.fire('#checkin-form', 'submit');
+  const before = app.records();
+  app.get('#checkin-note').value = 'An unfinished draft';
+  serviceWorker.controller = worker('v9');
+  await handlers.get('controllerchange')();
+  assert.equal(app.get('#reload-update').hidden, false);
+  assert.match(app.get('#connection-status').textContent, /Update ready/);
+  assert.equal(app.reloads(), 0, 'updates never reload a form automatically');
+  assert.equal(app.get('#checkin-note').value, 'An unfinished draft');
+  await app.fire('#reload-update', 'click');
+  assert.equal(app.reloads(), 0, 'canceling preserves the current page');
+  options.confirm = true;
+  await app.fire('#reload-update', 'click');
+  assert.equal(app.reloads(), 1);
+  assert.deepEqual(app.records(), before, 'reloading does not clear saved records');
 });

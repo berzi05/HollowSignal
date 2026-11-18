@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test",
-    "check": "node --check server.mjs && node --check dist/app.js && node --check dist/engine.js && node --check dist/relay.js && node --check dist/crisis.js && node --check dist/response-ui.js && node --check dist/health.js && node --check dist/health-ui.js && node --check dist/sw.js && node --test"
+    "check": "node --check server.mjs && node --check dist/app.js && node --check dist/engine.js && node --check dist/relay.js && node --check dist/crisis.js && node --check dist/response-ui.js && node --check dist/health.js && node --check dist/health-ui.js && node --check dist/updates.js && node --check dist/sw.js && node --test"
   },
   "license": "MIT"
 }
