@@ -18,17 +18,88 @@ The app works online and can keep working offline after its application cache in
 
 The pages work together. A neighborhood on Overview can become the starting point for a refuge or care route. The Crisis planner's clock and tunnel closure also affect aid routes. Travel plans can become check-in drafts, while care plans can become aid requests carried through the same relay.
 
-## Quick start
+## Open and run the app
 
-Use **Node.js 22 or later**. From the repository directory:
+These instructions work on **Windows, macOS, and Linux**. The app opens in your web browser, with a small local server running on your computer.
+
+### 1. Install Node.js
+
+Install **Node.js 22 or later** from the [official Node.js download page](https://nodejs.org/en/download). The installer includes npm. After installation, open a new terminal and check:
+
+```sh
+node --version
+npm --version
+```
+
+Both commands should print a version number. The Node.js version must be at least `v22`.
+
+### 2. Download the project
+
+**With Git:** install [Git](https://git-scm.com/downloads) if needed, then run these commands in the folder where you want to keep the project:
+
+```sh
+git clone --branch main https://github.com/berzi05/HollowSignal.git
+cd HollowSignal
+```
+
+**Without Git:** open the [GitHub repository](https://github.com/berzi05/HollowSignal), select the `main` branch, and choose **Code → Download ZIP**. Extract the ZIP, then open a terminal in the extracted folder containing `package.json` and `server.mjs`. Its default name is `HollowSignal-main`.
+
+If you already downloaded or cloned the project, open a terminal in that existing project folder. Older copies may still be named `PatriotHackathon`; the folder name does not affect how the app runs.
+
+### 3. Start the server
+
+From the project folder, run:
 
 ```sh
 npm start
 ```
 
-Open **http://127.0.0.1:3000**.
+The terminal should print:
 
-No dependency installation or build step is needed. JavaScript, styles, fonts, and images are included in `dist/`. The development server binds to localhost and serves static files; it does not receive resident records.
+```text
+Hollow Signal: http://127.0.0.1:3000
+```
+
+**Keep this terminal open while using the app.** To stop the server, press **Ctrl + C** in that terminal. To start it again later, return to the same project folder and run `npm start`.
+
+No `npm install`, build step, database, API key, or account is required. JavaScript, styles, fonts, and images are already included in `dist/`.
+
+### 4. Open the website
+
+Open **[http://127.0.0.1:3000/](http://127.0.0.1:3000/)** in a browser on the same computer. You should see the Hollow Signal dashboard and five tabs: **Overview**, **Crisis planner**, **Share supplies**, **Health & aid**, and **Community**.
+
+Use this browser address to run the app; double-clicking `dist/index.html` does not run the complete application. The local address works on your own computer. Someone using another computer should follow these setup steps there.
+
+For a first look, select **Explore a blackout**, or open **Health & aid → Load sample health signals**. All sample conditions are fictional.
+
+The server serves static files and does not receive resident records. Saved records stay in the browser. After downloading the project and installing Node.js, local use does not require an internet connection.
+
+### Get the latest updates
+
+Stop your running server with **Ctrl + C**. If you cloned with Git, run the following from the same project folder:
+
+```sh
+git switch main
+git pull --ff-only origin main
+npm start
+```
+
+If you downloaded a ZIP, download and extract the latest `main` ZIP, then run `npm start` from that new folder. Stop the old server first so both copies do not try to use port 3000.
+
+Return to the browser and choose **Check for updates**. When **Reload update** appears, save unfinished forms and click it. If an older page has no update controls, press **Ctrl + Shift + R** on Windows/Linux or **Command + Shift + R** in Chrome/Firefox on macOS.
+
+Updating the app does not require clearing saved records. Keep using the same browser and local address to access them.
+
+### If something does not work
+
+| What you see | What to do |
+| --- | --- |
+| `node` or `npm` is not recognized | Install Node.js, then close and reopen the terminal before trying again. |
+| PowerShell says `npm.ps1` cannot run | Use `npm.cmd start` in the project folder. |
+| npm cannot find `package.json` | Enter the project folder containing `package.json` and `server.mjs`, then run `npm start`. |
+| `EADDRINUSE` or port 3000 is already in use | Stop the previous server with **Ctrl + C** in its terminal, then retry. |
+| The browser cannot connect | Confirm that `npm start` is still running and open the exact address printed by the server. |
+| The page still shows an older version | Update the same project folder you run the server from, restart it, and use **Check for updates → Reload update** or a hard refresh. |
 
 ## Using the app
 
