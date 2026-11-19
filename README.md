@@ -187,6 +187,8 @@ For example, flooding the lower shaft can leave only a stair bypass from L20. Re
 
 Critical intermediate levels and travel beyond the origin's remaining reserve are flagged. Capacity is a snapshot; a route does not reserve space or certify safe passage.
 
+When no refuge qualifies, or a candidate crosses critical conditions or exceeds the origin's reserve, **Plan local assistance** opens Health & aid with the same neighborhood, group size, and step-free requirement. It selects **Mobile care / local assistance** and keeps the planner's scenario, time, and tunnel closure. Review and save the draft, then export a relay packet to share it; opening the draft does not save a request or dispatch anyone.
+
 ### Community health signals
 
 Health & aid compares one reconciled respiratory-symptom tally per neighborhood per UTC day. A tally contains the number reporting symptoms, the number observed, a source, review status, notes, and an update timestamp. It contains no individual medical profile.

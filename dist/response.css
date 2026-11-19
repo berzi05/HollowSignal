@@ -42,6 +42,14 @@
 .response-card[tabindex]{scroll-margin-top:20px}
 .projection-note{font-size:10px;line-height:1.7;color:var(--muted);margin-top:12px}
 .route-context{font-size:11px;line-height:1.7;color:var(--muted);margin-top:14px}
+.route-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;min-width:0}
+.route-actions .button{font-size:.875rem;min-height:44px;white-space:normal;text-align:center}
+.route-actions [hidden]{display:none}
+.route-footer{flex-wrap:wrap}
+.route-warning,.route-context{font-size:.875rem}
+.route-controls label,.route-controls select,.route-controls input:not([type=checkbox]){font-size:.875rem}
+.route-unavailable p,.route-footer p{font-size:1rem}
+@media(max-width:540px){.route-actions{width:100%}.route-actions .button{width:100%}}
 @media(max-width:1100px){.task-shortcuts{grid-template-columns:1fr}.task-shortcuts a{padding:15px 17px}.task-shortcuts small{margin-top:3px}.local-status{align-items:flex-start;flex-direction:column;gap:3px}}
 @media(max-width:950px){.sidebar .nav-item{font-size:10px;flex-direction:column;gap:5px;padding:12px 3px;text-align:center}.nav-label{white-space:normal;font-size:10px}.sidebar .nav-key{display:none}}
 @media(max-width:480px){.sidebar{height:70px;padding-inline:10px}.sidebar .brand>span{display:none}.sidebar .brand svg{width:24px;height:29px}.sidebar nav{flex:1;justify-content:space-around;margin-left:8px;gap:2px}.sidebar .nav-item{flex:1;min-width:0;padding:7px 2px;gap:4px}.sidebar .nav-icon{font-size:19px}.nav-label{font-size:9px}.response-card[tabindex]{scroll-margin-top:82px}.planner-nav button{font-size:11px;padding:9px 10px}}

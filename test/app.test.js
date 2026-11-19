@@ -221,11 +221,67 @@ test('overview find-aid action carries the neighborhood and focuses care plannin
   assert.equal(app.get('#health-aid').focused, true);
 });
 
+test('a blocked refuge route hands the whole group to local assistance without saving or losing records', () => {
+  const app = harness('#health');
+  app.fire('#health-sample', 'click');
+  const before = app.records();
+  app.navigate('#response');
+  app.fire('#drill-respond', 'click');
+  app.fire('#route-origin', 'change', { value: 'L16' });
+  app.fire('#route-group', 'change', { value: '37' });
+  app.fire('#route-step-free', 'change', { checked: true });
+  assert.match(app.get('#route-result').innerHTML, /No viable candidate/);
+  assert.equal(app.get('#route-assistance').hidden, false);
+  app.fire('#route-assistance', 'click');
+  assert.deepEqual(app.visible(), ['view-health']);
+  assert.equal(app.get('#health-aid').focused, true);
+  assert.equal(app.get('#aid-origin').value, 'L16');
+  assert.equal(Number(app.get('#aid-people').value), 37);
+  assert.equal(app.get('#aid-step-free').checked, true);
+  assert.equal(app.get('#aid-kind').value, 'mobile');
+  assert.match(app.get('#aid-result').innerHTML, /Local assistance needed/);
+  assert.match(app.get('#aid-context').textContent, /blackout.*20 min.*closed/);
+  assert.deepEqual(app.records(), before, 'a handoff prepares a draft, never saves or dispatches');
+  app.fire('#aid-save', 'click');
+  const records = app.records(), request = records.aidRequests[0];
+  assert.equal(request.people, 37);
+  assert.equal(request.level, 'L16');
+  assert.equal(request.kind, 'mobile');
+  assert.equal(request.clinicId, null);
+  assert.equal(request.context.stepFree, true);
+  assert.equal(request.context.minutes, 20);
+  assert.deepEqual(request.context.closedEdges, ['lower-shaft']);
+  assert.match(request.note, /Nothing dispatched/);
+  assert.deepEqual(records.healthReports, before.healthReports);
+  const imported = relay.parsePacket(relay.serializePacket(records.checkIns, records.reports, records));
+  assert.equal(imported.aidRequests[0].people, 37);
+  assert.equal(imported.aidRequests[0].context.stepFree, true);
+  app.navigate('#response');
+  assert.equal(Number(app.get('#route-group').value), 37);
+  assert.equal(app.get('#route-origin').value, 'L16');
+});
+
+test('local assistance preserves stair permission and is offered for flagged candidate routes', () => {
+  const app = harness('#response');
+  app.fire('#drill-respond', 'click');
+  app.fire('#route-group', 'change', { value: '8' });
+  assert.match(app.get('#route-result').innerHTML, /Travel exceeds/);
+  assert.equal(app.get('#route-assistance').hidden, false);
+  app.fire('#route-assistance', 'click');
+  assert.equal(Number(app.get('#aid-people').value), 8);
+  assert.equal(app.get('#aid-step-free').checked, false);
+  app.fire('#aid-save', 'click');
+  assert.equal(app.records().aidRequests[0].context.stepFree, false);
+  app.navigate('#response');
+  app.fire('#route-origin', 'change', { value: 'L01' });
+  assert.equal(app.get('#route-assistance').hidden, true, 'ordinary candidates retain the travel check-in action');
+});
+
 test('a newer cached version shows a reload control without losing drafts or saved records', async () => {
   const handlers = new Map();
   const worker = revision => ({ postMessage(message, ports) { ports[0].postMessage({ type: message.type, revision, ready: true }); } });
   const serviceWorker = {
-    controller: worker('v9'),
+    controller: worker('v10'),
     addEventListener: (name, handler) => handlers.set(name, handler),
     register: async () => ({ update: async () => {} }),
   };
@@ -236,7 +292,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   app.fire('#checkin-form', 'submit');
   const before = app.records();
   app.get('#checkin-note').value = 'An unfinished draft';
-  serviceWorker.controller = worker('v10');
+  serviceWorker.controller = worker('v11');
   await handlers.get('controllerchange')();
   assert.equal(app.get('#reload-update').hidden, false);
   assert.match(app.get('#connection-status').textContent, /Update ready/);

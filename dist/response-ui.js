@@ -27,7 +27,7 @@ function networkSvg(route, blocked, windows) {
   return `<svg viewBox="0 0 300 346" role="img" aria-label="Six-level tunnel network. ${blocked ? 'Lower shaft closed.' : 'Lower shaft open.'} ${route.found ? 'Candidate route: ' + route.path.join(' to ') : 'No candidate route meets the selected constraints.'}">${segments}${nodes}<text x="194" y="330" class="network-legend">STAIR BYPASS</text></svg>`;
 }
 
-export function initResponseLab({ getScenario, onScenario, onCheckIn, download, toast, onChange = () => {} }) {
+export function initResponseLab({ getScenario, onScenario, onCheckIn, download, toast, onChange = () => {}, onAssistance = () => {} }) {
   let state = defaults();
   let story = 0;
   let latest;
@@ -79,6 +79,7 @@ export function initResponseLab({ getScenario, onScenario, onCheckIn, download, 
       ? `<div class="route-heading"><span class="eyebrow">CANDIDATE REFUGE</span><h3>${esc(route.refuge.name)}</h3><div class="route-facts"><strong>${route.minutes}<small> min walk</small></strong><strong>${route.available}<small> places available</small></strong></div></div><ol class="route-itinerary">${route.path.map((id, i) => `<li><b>${id}</b> ${esc(LEVELS.find(level => level.id === id).name)}${i < route.edges.length ? `<small>${esc(route.edges[i].name)} · ${route.edges[i].minutes} min${route.edges[i].stepFree ? '' : ' · stairs'}</small>` : '<small>Capacity is a simulated snapshot, not a reservation.</small>'}</li>`).join('')}</ol>${route.exceedsReserve ? '<p class="route-warning">Travel exceeds the origin’s remaining reserve. This plan needs local assistance and review before anyone moves.</p>' : ''}${route.criticalLevels.length ? `<p class="route-warning">Critical readings along the path: ${route.criticalLevels.join(', ')}. A calculated route is not a safety clearance.</p>` : ''}`
       : `<div class="route-unavailable"><span aria-hidden="true">⊘</span><h3>No viable candidate</h3><p>${esc(route.reason)}</p></div>`;
     $('#route-message').textContent = route.found ? 'Draft a travel check-in →' : 'Draft a help request →';
+    $('#route-assistance').hidden = route.found && !route.exceedsReserve && route.criticalLevels.length === 0;
     $('#route-status').textContent = route.found ? (route.stepFree ? 'Step-free candidate' : 'Stairs on this route') : 'Local assistance needed';
     document.querySelectorAll('[data-drill-step]').forEach(button => {
       const active = Number(button.dataset.drillStep) === story;
@@ -119,6 +120,7 @@ export function initResponseLab({ getScenario, onScenario, onCheckIn, download, 
   });
   $('#drill-reconnect').addEventListener('click', draftCheckIn);
   $('#route-message').addEventListener('click', draftCheckIn);
+  $('#route-assistance').addEventListener('click', () => onAssistance({ origin: state.origin, people: state.groupSize, stepFree: state.stepFree }));
   $('#response-time').addEventListener('input', event => { state.minutes = Number(event.target.value); render(); });
   $('#response-supply').addEventListener('input', event => { state.supply = Number(event.target.value); render(); });
   $('#route-origin').addEventListener('change', event => { state.origin = event.target.value; render(); });

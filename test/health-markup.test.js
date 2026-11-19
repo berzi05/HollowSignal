@@ -11,4 +11,5 @@ test('health controls exist in the document and navigation and labels target rea
   for (const match of html.matchAll(/<label\b[^>]*\bfor="([^"]+)"/g)) assert.ok(ids.includes(match[1]), `Unresolved label ${match[1]}`);
   for (const match of html.matchAll(/data-view="([^"]+)"/g)) assert.ok(ids.includes(`view-${match[1]}`), `Missing view ${match[1]}`);
   for (const match of html.matchAll(/data-health-target="([^"]+)"/g)) assert.ok(ids.includes(match[1]), `Missing health jump target ${match[1]}`);
+  assert.ok(ids.includes('route-assistance'), 'The refuge-to-assistance control exists in the real document');
 });

@@ -17,7 +17,7 @@ const fmt = (n, digits = 0) => {
 const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const storageKey = 'hollow-signal-v1';
 // Must match REVISION in sw.js (enforced by test/sw.test.js).
-const CACHE_REVISION = 'v9';
+const CACHE_REVISION = 'v10';
 const DEFAULTS = Object.freeze({ scenario: 'baseline', selected: 'L20', resource: 'power' });
 const state = { ...DEFAULTS, supply: 1140, checkIns: [], reports: [], healthReports: [], clinicUpdates: [], aidRequests: [] };
 const VIEWS = {
@@ -279,6 +279,11 @@ $('#reset-button').addEventListener('click', () => {
 });
 responseLab = initResponseLab({
   onChange: () => { healthLab?.render(); aiBrief?.refreshContext(); },
+  onAssistance: plan => {
+    healthLab.prepareAssistance(plan);
+    location.hash = 'health'; showView(); healthLab.focusSection('health-aid');
+    toast(`${plan.people} people at ${plan.origin} carried into a local assistance draft. Review and save the request, then export a relay packet to share it.`);
+  },
   getScenario: () => state.scenario,
   onScenario: scenario => {
     $('#scenario').value = scenario;

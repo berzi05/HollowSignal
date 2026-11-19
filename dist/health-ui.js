@@ -141,6 +141,15 @@ export function initHealthAid({ getRecords, getSituation, onSave, toast, downloa
     if (!LEVELS.some(row => row.id === level)) throw new TypeError('Unknown aid origin.');
     origin = level; $('#aid-origin').value = level; renderAid();
   }
+  function prepareAssistance({ origin: level, people, stepFree }) {
+    if (!LEVELS.some(row => row.id === level) || !Number.isInteger(people) || people < 1 || people > 1000 || typeof stepFree !== 'boolean') {
+      throw new TypeError('Choose a valid neighborhood, group size, and access requirement.');
+    }
+    origin = level;
+    $('#aid-origin').value = level; $('#aid-people').value = people;
+    $('#aid-kind').value = 'mobile'; $('#aid-step-free').checked = stepFree;
+    renderAid();
+  }
   function reset() {
     origin = 'L20'; $('#aid-origin').value = origin; $('#aid-people').value = 1;
     $('#aid-kind').value = 'visit'; $('#aid-step-free').checked = true;
@@ -149,5 +158,5 @@ export function initHealthAid({ getRecords, getSituation, onSave, toast, downloa
     loadTally(); loadClinic(); render();
   }
   reset();
-  return { render, setOrigin, focusSection, reset };
+  return { render, setOrigin, prepareAssistance, focusSection, reset };
 }
