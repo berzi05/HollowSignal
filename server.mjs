@@ -3,6 +3,7 @@ import { realpathSync } from 'node:fs';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createAiHandler } from './ai.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), 'dist');
 const MIME = {
@@ -41,13 +42,15 @@ export function resolveAssetPath(requestUrl, root = ROOT) {
   return candidate;
 }
 
-/** Local development server. Static assets only; no data leaves the browser. */
-export function createStaticServer(root = ROOT) {
+/** Local app server with an optional, loopback-only AI endpoint. */
+export function createStaticServer(root = ROOT, aiOptions = {}) {
+  const handleAi = createAiHandler(aiOptions);
   let realRoot; // Resolved once on first successful request rather than on every request.
   return createServer(async (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
     response.setHeader('Cache-Control', 'no-cache');
+    if (await handleAi(request, response)) return;
     if (!['GET', 'HEAD'].includes(request.method)) {
       response.writeHead(405, { Allow: 'GET, HEAD', 'Content-Type': 'text/plain; charset=utf-8' });
       response.end('Method not allowed');
@@ -95,12 +98,19 @@ function isEntryPoint() {
 }
 
 if (isEntryPoint()) {
+  try { process.loadEnvFile(resolve(dirname(fileURLToPath(import.meta.url)), '.env')); }
+  catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error('Could not load .env. Check that the file is readable and uses KEY=value lines.');
+      process.exit(1);
+    }
+  }
   const port = Number(process.env.PORT || 3000);
   const host = process.env.HOST || '127.0.0.1';
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new TypeError('PORT must be an integer from 1 to 65535');
   }
-  const server = createStaticServer();
+  const server = createStaticServer(ROOT, { apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL });
   server.on('error', error => {
     console.error(`Hollow Signal could not start: ${error.message}`);
     process.exitCode = 1;

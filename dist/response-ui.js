@@ -103,7 +103,7 @@ export function initResponseLab({ getScenario, onScenario, onCheckIn, download, 
     onScenario('blackout'); render(); location.hash = 'response';
   }
   function focusSection(id) {
-    if (!['response-reserves', 'response-allocation', 'response-routes'].includes(id)) return;
+    if (!['response-reserves', 'response-allocation', 'response-routes', 'response-ai'].includes(id)) return;
     const section = $('#' + id);
     section.scrollIntoView({ block: 'start' });
     section.focus({ preventScroll: true });
@@ -142,6 +142,10 @@ export function initResponseLab({ getScenario, onScenario, onCheckIn, download, 
   syncControls(); render();
   return {
     render, focusSection,
+    getInputs() {
+      return { scenario: getScenario(), minutes: state.minutes, supply: state.supply, origin: state.origin,
+        groupSize: state.groupSize, stepFree: state.stepFree, closedEdges: state.blocked ? ['lower-shaft'] : [] };
+    },
     getSituation() { return { ...latest.situation, closedEdges: state.blocked ? ['lower-shaft'] : [] }; },
     setOrigin(id) {
       if (!LEVELS.some(level => level.id === id)) throw new TypeError('Choose a known starting level.');

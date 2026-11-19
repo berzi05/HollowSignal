@@ -4,14 +4,14 @@
 
 Built for the **Life underground** hackathon track, Hollow Signal connects early warnings, fair resource planning, refuge routes, care access, and community check-ins. It models six neighborhoods and 19,000 fictional residents in one sector of the Hollow.
 
-The app works online and can keep working offline after its application cache installs. Its calculations and local records work without an API key or account; sharing between devices uses manually transferred relay files.
+The app works online and can keep working offline after its application cache installs. Its calculations and local records work without an API key or account; sharing between devices uses manually transferred relay files. An optional **OpenAI response brief** explains a calculated crisis plan and drafts a resident message, with a local brief available when AI is unavailable.
 
 ## What you can do
 
 | Page | Purpose | Main features |
 | --- | --- | --- |
 | **Overview** | Understand what is happening in your neighborhood. | Power, air, heat, and water signals; explained warnings; reserve estimates; shortcuts to response planning and aid. |
-| **Crisis planner** | Explore how a failure develops and plan the next move. | A 0–120 minute projection, power-allocation comparison, tunnel closures, and refuge routes that account for group size and step-free access. |
+| **Crisis planner** | Explore how a failure develops and plan the next move. | A 0–120 minute projection, power-allocation comparison, accessible refuge routes, and AI or local response briefs with sources and resident-message drafts. |
 | **Share supplies** | Make a transparent plan for limited resources. | Power, water, and food allocations; essential shortfalls; demand coverage; unused supply; downloadable plans. |
 | **Health & aid** | Connect community health observations to available support. | Daily respiratory tallies, source and review labels, clinic capacity, supply shortages, care routes, and local-assistance requests. |
 | **Community** | Keep people in contact when the network is unreliable. | Call-sign check-ins, incident reports, search, and import/export of shared relay packets. |
@@ -62,7 +62,7 @@ Hollow Signal: http://127.0.0.1:3000
 
 **Keep this terminal open while using the app.** To stop the server, press **Ctrl + C** in that terminal. To start it again later, return to the same project folder and run `npm start`.
 
-No `npm install`, build step, database, API key, or account is required. JavaScript, styles, fonts, and images are already included in `dist/`.
+No `npm install`, build step, database, API key, or account is required for the core app. JavaScript, styles, fonts, and images are already included in `dist/`. Optional AI setup is described below.
 
 ### 4. Open the website
 
@@ -72,7 +72,7 @@ Use this browser address to run the app; double-clicking `dist/index.html` does 
 
 For a first look, select **Explore a blackout**, or open **Health & aid → Load sample health signals**. All sample conditions are fictional.
 
-The server serves static files and does not receive resident records. Saved records stay in the browser. After downloading the project and installing Node.js, local use does not require an internet connection.
+The server serves the app and an optional AI endpoint. Saved resident records stay in the browser. Only an explicit **Explain with AI** request sends the fictional planner settings to the local server, which calculates the source facts and sends those facts to OpenAI. After downloading the project and installing Node.js, the core app and local briefs work without an internet connection.
 
 ### Get the latest updates
 
@@ -101,12 +101,51 @@ Updating the app does not require clearing saved records. Keep using the same br
 | The browser cannot connect | Confirm that `npm start` is still running and open the exact address printed by the server. |
 | The page still shows an older version | Update the same project folder you run the server from, restart it, and use **Check for updates → Reload update** or a hard refresh. |
 
+## Optional AI response briefs
+
+In **Crisis planner → AI response brief**, choose **Explain with AI** to get a plain-language summary, three explained priorities, and a resident-message draft. Calculated source facts and warnings appear alongside the AI text. **Copy brief** and **Download brief** include those sources and warnings.
+
+The integration uses the [OpenAI Responses API](https://developers.openai.com/api/docs/quickstart) and [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs). The default model is [`gpt-6.2-sol`](https://developers.openai.com/api/docs/models/gpt-6.2-sol). A live request requires internet access, a valid OpenAI API key, access to that model, and API billing or credits. Usage may incur charges.
+
+### Enable AI locally
+
+1. Create an API key in the [OpenAI API dashboard](https://platform.openai.com/api-keys).
+2. In the project folder containing `server.mjs`, copy **`.env.example` to `.env`**. Use your file manager, or `Copy-Item .env.example .env` in PowerShell / `cp .env.example .env` on macOS or Linux. Skip copying if you already have a `.env` file so you preserve its settings.
+3. Open `.env` in a text editor and fill in your key:
+
+   ```dotenv
+   OPENAI_API_KEY=your_api_key_here
+   OPENAI_MODEL=gpt-6.2-sol
+   ```
+
+4. Save the file as exactly `.env`, not `.env.txt`. Keep the key out of `dist/`, browser fields, relay files, screenshots, and Git commits. `.env` is ignored by Git; `.env.example` contains no secret.
+5. Stop the server with **Ctrl + C**, run **`npm start`** again from this project folder, and open **[http://127.0.0.1:3000/](http://127.0.0.1:3000/)**.
+6. Open **Crisis planner → AI response brief**, then select **Check AI connection** and **Explain with AI**. “Configured” only means a key is present; “OpenAI responded successfully” confirms a completed request.
+
+Existing environment variables take precedence over `.env`. To change the model, set `OPENAI_MODEL` to a Responses-compatible model supporting structured outputs and low reasoning effort, then restart the server.
+
+### What AI adds, and what stays calculated
+
+- **Explain the plan:** summarize reserve losses, power-allocation tradeoffs, and the current refuge-access result in plain language.
+- **Draft a message:** prepare a short rehearsal update for residents, with review warnings included when copied or downloaded. Nothing is sent automatically.
+- **Inspect the evidence:** every priority references one of three calculated facts. AI wording can still misinterpret a fact; review it against the displayed sources.
+- **Keep the snapshot current:** changing the scenario, clock, budget, group, origin, accessibility, or closures makes an earlier brief outdated. Copy/download remain disabled until a matching brief is generated; pending answers for changed settings are discarded.
+- **Continue without AI:** **Create local brief** uses deterministic rules immediately. Missing keys, network failures, timeouts, and unusable AI responses produce a clearly labeled local brief, never a pretend AI result.
+
+The API accepts only the seven planner settings. The server independently recalculates facts using the same engine as the browser. It does not accept prompts, check-ins, call signs, field reports, health notes, clinic updates, or aid requests. AI cannot modify allocations, invent a usable route in the planner, reserve capacity, prescribe care, or dispatch help.
+
+The key stays on the Node server. Requests use `store: false`; this is not a promise that the provider retains no data under its own policies. The local endpoint allows one generation at a time and at most five attempts per minute, caps output, times out after 30 seconds, and reuses successful identical snapshots for five minutes in server memory. Clicking **Stop waiting** discards the answer in the browser; a provider request already sent may still finish and incur usage.
+
+**Static hosting:** `dist/` can still be hosted independently and supports local briefs, but static hosting cannot run the AI endpoint. This implementation intentionally restricts AI access to the computer running Node via localhost. Public AI hosting would need an authenticated backend and per-user usage controls; uploading `.env` or putting the key in frontend JavaScript is not a deployment option.
+
+If AI falls back to a local brief, check that you restarted the correct server after editing `.env`. For provider errors, check key validity, model access, API balance, and the computer's network connection. Community records and the rest of the app remain usable.
+
 ## Using the app
 
 The five main tabs have visible labels on desktop, tablet, and phone layouts. Overview includes task shortcuts, and the planning pages provide section jumps.
 
 1. **Inspect a neighborhood.** Choose a power, water, or heat scenario and select a level on Overview. Read the warnings and their causes.
-2. **Plan a response.** Use **Plan for this level** to open the Crisis planner. Adjust time, available power, group size, tunnel access, and step-free requirements.
+2. **Plan a response.** Use **Plan for this level** to open the Crisis planner. Adjust time, available power, group size, tunnel access, and step-free requirements. Jump to **AI response brief** for an explained plan and message draft, or use **Create local brief** without AI.
 3. **Share supplies.** Open Share supplies to compare power, water, or food allocations and export a plan.
 4. **Find care.** Use **Find aid** or open Health & aid. Add a daily tally or choose **Load sample health signals**, then select **Plan aid** beside a neighborhood.
 5. **Request assistance.** Review the proposed clinic and route. Choose **Mobile care / local assistance** when people cannot travel. Save the request and track its coordination status.
@@ -188,6 +227,7 @@ Someone must carry or send the file to another device. There is no automatic rad
 | Resource allocation | Recalculated in memory | **Export plan** in Share supplies. |
 | Current care or supply candidate | Recalculated in memory | Save an aid request, then export a relay packet. |
 | Crisis projection and refuge route | Recalculated in memory | **Export response brief** in the Crisis planner. |
+| Explained brief and resident-message draft | Browser memory; successful AI results also cached for five minutes in server memory | **Copy brief** or **Download brief** in the Crisis planner. These include source facts and warnings. |
 | Application assets | Browser service-worker cache | Reload offline after **Offline cache ready** appears. |
 
 A response brief includes the scenario, clock, budget, constraints, assumptions, allocations, and route result. Response briefs and allocation plans are planning documents; they are not importable relay packets.
@@ -207,13 +247,17 @@ If an older cached page has no update controls, use **Ctrl + Shift + R** once. F
 | `dist/engine.js` | Scenario readings, risk rules, resource allocation, and check-in validation |
 | `dist/crisis.js` | Time projection, policy comparison, route search, and response briefs |
 | `dist/response-ui.js` | Planner controls and travel/help drafts |
+| `dist/brief.js` | Strict planner-input validation, calculated source facts, local brief, and text export |
+| `dist/ai-ui.js`, `dist/ai.css` | AI/local brief interface, cancellation, outdated-snapshot handling, and responsive layout |
 | `dist/health.js` | Health signal rules, clinic freshness, aid routing, and validation |
 | `dist/health-ui.js` | Health forms, evidence review, clinic updates, and aid requests |
 | `dist/relay.js` | Field reports, packet validation, and deterministic merges |
 | `dist/styles.css`, `dist/response.css`, `dist/health.css` | Responsive presentation |
 | `dist/sw.js` | Versioned offline shell and cache-readiness checks |
 | `dist/updates.js` | Update checks and detection of a complete newer offline cache |
-| `server.mjs` | Local static server with path isolation |
+| `server.mjs` | Local app server with path isolation and optional `.env` loading |
+| `ai.mjs` | Local-only OpenAI endpoint, structured output validation, request limits, and in-memory caching |
+| `.env.example` | Optional AI configuration template; copy to the untracked `.env` file |
 | `test/` | Model, integration, navigation, relay, server, and offline-asset tests |
 
 ## Validation
@@ -222,7 +266,7 @@ If an older cached page has no update controls, use **Ctrl + Shift + R** once. F
 npm run check
 ```
 
-Runs syntax checks and the Node test suite. Coverage includes allocation conservation, crisis projections, inaccessible routes, capacity and stock constraints, health trends, duplicate imports, stale clinic data, legacy packet migration, navigation, and the offline dependency graph.
+Runs syntax checks and the Node test suite. Coverage includes allocation conservation, crisis projections, inaccessible routes, capacity and stock constraints, health trends, duplicate imports, stale clinic data, legacy packet migration, navigation, and the offline dependency graph. AI tests exercise the real local HTTP endpoint with a simulated provider transport: request privacy, origin restrictions, output validation, request limits, timeouts, local fallback, safe text rendering, and outdated-answer rejection. They require no key and make no paid API calls; a live provider connection must be verified separately with your configured key.
 
 ## Prototype scope
 

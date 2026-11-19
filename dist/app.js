@@ -3,6 +3,7 @@ import { createReport, mergeReports, parsePacket, serializePacket } from './rela
 import { initResponseLab } from './response-ui.js';
 import { initHealthAid } from './health-ui.js';
 import { createUpdateMonitor } from './updates.js';
+import { initAiBrief } from './ai-ui.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -16,7 +17,7 @@ const fmt = (n, digits = 0) => {
 const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const storageKey = 'hollow-signal-v1';
 // Must match REVISION in sw.js (enforced by test/sw.test.js).
-const CACHE_REVISION = 'v8';
+const CACHE_REVISION = 'v9';
 const DEFAULTS = Object.freeze({ scenario: 'baseline', selected: 'L20', resource: 'power' });
 const state = { ...DEFAULTS, supply: 1140, checkIns: [], reports: [], healthReports: [], clinicUpdates: [], aidRequests: [] };
 const VIEWS = {
@@ -35,6 +36,7 @@ let updateMonitor;
 let currentView;
 let responseLab;
 let healthLab;
+let aiBrief;
 const scenarioNotes = {
   baseline: '',
   blackout: 'Geothermal outage simulated: power coverage drops 34 points from L08 down. Ventilation weakens and battery reserves shrink. Review the deepest levels first.',
@@ -171,7 +173,7 @@ function renderReports() {
 }
 function renderSituation() { renderMetrics(); renderMap(); renderAlerts(); renderDetail(); renderAllocation(); responseLab?.render(); }
 function download(name, contents) {
-  const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
+  const url = URL.createObjectURL(new Blob([contents], { type: name.endsWith('.txt') ? 'text/plain;charset=utf-8' : 'application/json' }));
   const anchor = document.createElement('a');
   anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -276,7 +278,7 @@ $('#reset-button').addEventListener('click', () => {
   if (persisted) toast('Demo reset. Local records cleared.');
 });
 responseLab = initResponseLab({
-  onChange: () => healthLab?.render(),
+  onChange: () => { healthLab?.render(); aiBrief?.refreshContext(); },
   getScenario: () => state.scenario,
   onScenario: scenario => {
     $('#scenario').value = scenario;
@@ -299,6 +301,7 @@ healthLab = initHealthAid({
   onSave: patch => commit(state.checkIns, state.reports, { ...state, ...patch }),
   toast, download: exportRelay,
 });
+aiBrief = initAiBrief({ getInputs: () => responseLab.getInputs(), download, toast });
 window.addEventListener('online', () => { updateConnection(); updateMonitor?.check({ force: true }); });
 window.addEventListener('offline', () => { updateConnection(); updateMonitor?.refresh(); });
 window.addEventListener('focus', () => { updateMonitor?.check(); healthLab.render(); });

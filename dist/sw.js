@@ -1,9 +1,9 @@
 // Increment the revision whenever the app shell changes, and keep CACHE_REVISION in
 // app.js identical (test/sw.test.js enforces this). Scope isolates installations.
 const CACHE_PREFIX = `hollow-signal:${self.registration.scope}:`;
-const REVISION = 'v8';
+const REVISION = 'v9';
 const CACHE_NAME = `${CACHE_PREFIX}${REVISION}`;
-const SHELL = ['./', './index.html', './styles.css', './response.css', './app.js', './engine.js', './relay.js', './crisis.js', './response-ui.js', './health.js', './health-ui.js', './health.css', './updates.js', './manifest.webmanifest', './icon.svg', './fonts/dm-sans.ttf', './fonts/space-grotesk.ttf']
+const SHELL = ['./', './index.html', './styles.css', './response.css', './app.js', './engine.js', './relay.js', './crisis.js', './response-ui.js', './health.js', './health-ui.js', './health.css', './updates.js', './brief.js', './ai-ui.js', './ai.css', './manifest.webmanifest', './icon.svg', './fonts/dm-sans.ttf', './fonts/space-grotesk.ttf']
   .map(path => new URL(path, self.registration.scope).href);
 const SHELL_URLS = new Set(SHELL);
 const INDEX_URL = new URL('./index.html', self.registration.scope).href;

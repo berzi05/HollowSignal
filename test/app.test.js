@@ -7,11 +7,13 @@ import * as relay from '../dist/relay.js';
 import * as crisis from '../dist/crisis.js';
 import * as health from '../dist/health.js';
 import { createUpdateMonitor } from '../dist/updates.js';
+import * as brief from '../dist/brief.js';
 
 const source = await readFile(new URL('../dist/app.js', import.meta.url), 'utf8');
 const responseSource = await readFile(new URL('../dist/response-ui.js', import.meta.url), 'utf8');
 
 const healthSource = await readFile(new URL('../dist/health-ui.js', import.meta.url), 'utf8');
+const aiSource = await readFile(new URL('../dist/ai-ui.js', import.meta.url), 'utf8');
 
 function harness(initialHash = '', initialRecords, options = {}) {
   const handlers = new Map();
@@ -55,7 +57,8 @@ function harness(initialHash = '', initialRecords, options = {}) {
   // Run the actual app and its hashchange listener with a minimal DOM.
   // Supply the real modules through the VM context instead of ESM imports.
   const context = vm.createContext({
-    ...engine, ...relay, ...crisis, ...health, createUpdateMonitor, document, location,
+    ...engine, ...relay, ...crisis, ...health, ...brief, createUpdateMonitor, document, location,
+    AbortController, AbortSignal, fetch: options.fetch || (async () => new Response('{"configured":false}')),
     Event: class { constructor(type) { this.type = type; } },
     FormData: class {
       *[Symbol.iterator]() {
@@ -72,6 +75,7 @@ function harness(initialHash = '', initialRecords, options = {}) {
   });
   context.initResponseLab = vm.runInContext('(() => {' + responseSource.replace(/^import .*;\r?\n/gm, '').replace('export function initResponseLab', 'function initResponseLab') + '; return initResponseLab; })()', context);
   context.initHealthAid = vm.runInContext('(() => {' + healthSource.replace(/^import .*;\r?\n/gm, '').replace('export function initHealthAid', 'function initHealthAid') + '; return initHealthAid; })()', context);
+  context.initAiBrief = vm.runInContext('(() => {' + aiSource.replace(/^import .*;\r?\n/gm, '').replace('export function initAiBrief', 'function initAiBrief') + '; return initAiBrief; })()', context);
   vm.runInContext(source.replace(/^import .*;\r?\n/gm, ''), context, { filename: 'app.js' });
   return {
     get: selector => document.querySelector(selector),
@@ -86,6 +90,7 @@ function harness(initialHash = '', initialRecords, options = {}) {
     active() { return links.filter(link => link['aria-current'] === 'page').map(link => link.dataset.view); },
     title() { return document.title; },
     updatesReady: () => vm.runInContext('updateMonitor?.ready', context),
+    aiReady: () => vm.runInContext('aiBrief.ready', context),
     reloads: () => reloads,
   };
 }
@@ -220,7 +225,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   const handlers = new Map();
   const worker = revision => ({ postMessage(message, ports) { ports[0].postMessage({ type: message.type, revision, ready: true }); } });
   const serviceWorker = {
-    controller: worker('v8'),
+    controller: worker('v9'),
     addEventListener: (name, handler) => handlers.set(name, handler),
     register: async () => ({ update: async () => {} }),
   };
@@ -231,7 +236,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   app.fire('#checkin-form', 'submit');
   const before = app.records();
   app.get('#checkin-note').value = 'An unfinished draft';
-  serviceWorker.controller = worker('v9');
+  serviceWorker.controller = worker('v10');
   await handlers.get('controllerchange')();
   assert.equal(app.get('#reload-update').hidden, false);
   assert.match(app.get('#connection-status').textContent, /Update ready/);
@@ -243,4 +248,82 @@ test('a newer cached version shows a reload control without losing drafts or sav
   await app.fire('#reload-update', 'click');
   assert.equal(app.reloads(), 1);
   assert.deepEqual(app.records(), before, 'reloading does not clear saved records');
+});
+
+test('planner offers a useful local brief and invalidates it when the route changes', async () => {
+  let paidCalls = 0;
+  const app = harness('#response', undefined, { fetch: async (url, options) => {
+    if (options.method === 'POST') paidCalls++;
+    return new Response('{"configured":false}');
+  } });
+  await app.aiReady();
+  app.fire('#drill-respond', 'click');
+  app.fire('#route-step-free', 'change', { checked: true });
+  app.fire('#ai-local', 'click');
+  assert.match(app.get('#ai-source').textContent, /Local brief/);
+  assert.match(app.get('#ai-message').textContent, /No refuge candidate/);
+  assert.equal(app.get('#ai-copy').disabled, false);
+  app.fire('#route-step-free', 'change', { checked: false });
+  assert.equal(app.get('#ai-stale').hidden, false);
+  assert.equal(app.get('#ai-copy').disabled, true);
+  assert.equal(app.get('#ai-export').disabled, true);
+  app.fire('#ai-local', 'click');
+  assert.match(app.get('#ai-message').textContent, /Includes stairs/);
+  assert.equal(app.get('#ai-stale').hidden, true);
+  assert.equal(paidCalls, 0);
+});
+
+test('AI UI sends only planner settings, renders returned text safely, and labels real AI separately', async () => {
+  const app = harness('#response', undefined, { fetch: async (url, options) => {
+    if (url.endsWith('/status')) return new Response('{"configured":true}');
+    const inputs = JSON.parse(options.body);
+    assert.deepEqual(Object.keys(inputs), ['scenario', 'minutes', 'supply', 'origin', 'groupSize', 'stepFree', 'closedEdges']);
+    const context = brief.buildBriefContext(inputs);
+    const answer = brief.createLocalBrief(context);
+    answer.priorities[0].explanation = '<img src=x onerror=alert(1)>';
+    return new Response(JSON.stringify({ source: 'ai', key: context.key, model: 'test-model', brief: answer, cached: false }));
+  } });
+  await app.aiReady();
+  await app.fire('#ai-generate', 'click');
+  assert.match(app.get('#ai-source').textContent, /AI draft · test-model/);
+  assert.match(app.get('#ai-priorities').innerHTML, /&lt;img/);
+  assert.doesNotMatch(app.get('#ai-priorities').innerHTML, /<img/);
+  assert.equal(app.get('#ai-copy').disabled, false);
+  assert.match(app.get('#ai-connection').textContent, /responded successfully/);
+});
+
+test('an AI response for an earlier plan is discarded even if its transport ignores cancellation', async () => {
+  let resolveCall, received;
+  const app = harness('#response', undefined, { fetch: async (url, options) => {
+    if (url.endsWith('/status')) return new Response('{"configured":true}');
+    received = JSON.parse(options.body);
+    return new Promise(resolve => { resolveCall = resolve; });
+  } });
+  await app.aiReady();
+  app.fire('#ai-local', 'click');
+  const pending = app.fire('#ai-generate', 'click');
+  app.fire('#response-time', 'input', { value: '30' });
+  const context = brief.buildBriefContext(received);
+  resolveCall(new Response(JSON.stringify({ source: 'ai', key: context.key, model: 'test-model', brief: brief.createLocalBrief(context) })));
+  await pending;
+  assert.match(app.get('#ai-source').textContent, /Local brief/);
+  assert.equal(app.get('#ai-stale').hidden, false);
+  assert.equal(app.get('#ai-copy').disabled, true);
+  assert.match(app.get('#ai-feedback').textContent, /Plan changed/);
+});
+
+test('missing backend, missing key and invalid AI output visibly fall back to local rules', async () => {
+  for (const reply of [
+    () => new Response('static hosting has no API', { status: 404 }),
+    () => new Response('{"error":"not_configured"}', { status: 503 }),
+    () => new Response('{"source":"ai","key":"wrong","model":"test","brief":{}}'),
+  ]) {
+    const app = harness('#response', undefined, { fetch: async (url) => url.endsWith('/status') ? new Response('{"configured":false}') : reply() });
+    await app.aiReady();
+    await app.fire('#ai-generate', 'click');
+    assert.match(app.get('#ai-source').textContent, /Local brief/);
+    assert.match(app.get('#ai-feedback').textContent, /Showing a local brief instead/);
+    assert.equal(app.get('#ai-generate').disabled, false);
+    assert.equal(app.get('#ai-copy').disabled, false);
+  }
 });

@@ -7,6 +7,7 @@
   <title>Hollow Signal — Keep the Hollow alive</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./response.css">
   <link rel="stylesheet" href="./health.css">
+  <link rel="stylesheet" href="./ai.css">
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -49,7 +50,7 @@
       <section id="view-response" class="view" aria-label="Crisis planner" hidden>
         <div class="response-intro"><div><div class="eyebrow">A REHEARSAL FOR THE PEOPLE BELOW</div><h2>The next 120 minutes<br>are a series of choices.</h2><p>Explore one connected response to a failing plant. Every number below is recalculated from the same fictional scenario.</p></div><button class="button secondary" id="export-response">Export response brief ↓</button></div>
         <nav class="planner-nav" aria-label="Within crisis planner">
-          <span>Jump to</span><button data-planner-target="response-reserves" aria-controls="response-reserves">Reserves</button><button data-planner-target="response-allocation" aria-controls="response-allocation">Power allocation</button><button data-planner-target="response-routes" aria-controls="response-routes">Refuge route</button>
+          <span>Jump to</span><button data-planner-target="response-reserves" aria-controls="response-reserves">Reserves</button><button data-planner-target="response-allocation" aria-controls="response-allocation">Power allocation</button><button data-planner-target="response-routes" aria-controls="response-routes">Refuge route</button><button data-planner-target="response-ai" aria-controls="response-ai">AI response brief</button>
         </nav>
         <div class="drill-steps" aria-label="Scenario actions">
           <button id="drill-shock" data-drill-step="1" aria-pressed="false"><span>01 / WARN</span><b>Start a blackout</b><small>Reset the planner to the outage scenario</small></button>
@@ -63,6 +64,23 @@
           <section id="response-routes" class="panel response-card route-card" tabindex="-1"><div class="response-card-heading"><div><span class="eyebrow muted">03 / FIND A WAY THROUGH</span><h2>A route is only useful if you can take it.</h2></div><span class="model-tag" id="route-status" role="status"></span></div><p id="route-context" class="route-context"></p><div class="route-controls"><div><label for="route-origin">Starting neighborhood</label><select id="route-origin"></select></div><div><label for="route-group">People traveling</label><input id="route-group" type="number" min="1" max="1000" step="1" value="12"></div><label class="route-toggle"><input type="checkbox" id="route-step-free"> Need a step-free route</label><label class="route-toggle closure-toggle"><input type="checkbox" id="route-closure"> Lower shaft flooded</label></div><div class="route-content"><div id="route-network" class="route-network"></div><div id="route-result" class="route-result"></div></div><div class="route-footer"><p>Checks closures, access needs, modeled hazards, and room for your whole group.</p><button class="button primary" id="route-message">Draft a travel check-in →</button></div></section>
         </div>
         <details class="response-assumptions"><summary>Show the model, the limits, and what gets exported</summary><div><p><b>Time:</b> reserve draw = 1 − supply coverage. After modeled depletion, oxygen drops 0.015 percentage points/min (up to 1.5), CO₂ rises 14 ppm/min, and temperature rises 0.025°C/min. These are fictional rehearsal assumptions, not a forecast.</p><p><b>Fairness:</b> both policies receive exactly the same power budget. The comparison policy fills upper-level demand first. The community policy protects proportional essentials, then weights unmet demand by vulnerability and hazards. Coverage is not a count of lives saved.</p><p><b>Movement:</b> route cost = walking minutes × (1 + destination risk score / 100). Closed tunnels and inaccessible stairs are removed. Refuges need space for the entire group and cannot have critical destination readings. Intermediate critical levels are explicitly flagged. Capacities are simulated snapshots; no places are reserved.</p><p><b>Transfer:</b> a response brief exports the inputs, assumptions, allocation, and route as JSON. It is a planning document, separate from an importable family relay packet. Nothing is dispatched automatically. Use the Community relay to save and transfer check-ins.</p></div></details>
+        <section id="response-ai" class="panel response-card ai-card" tabindex="-1" aria-labelledby="ai-heading">
+          <div class="response-card-heading"><div><span class="eyebrow muted">04 / MAKE THE PLAN UNDERSTOOD</span><h2 id="ai-heading">Turn the numbers into a shared plan.</h2></div><span class="model-tag">RESPONSE BRIEF</span></div>
+          <p class="ai-intro">Explain the reserve window, power tradeoffs, and refuge access in plain language. Get a resident-message draft with the calculated sources beside it.</p>
+          <div class="ai-actions"><button id="ai-generate" class="button primary">Explain with AI</button><button id="ai-local" class="button secondary">Create local brief</button><button id="ai-cancel" class="button secondary" hidden>Stop waiting</button></div>
+          <p class="ai-connection" id="ai-connection" role="status">Checking AI configuration…</p>
+          <div class="ai-actions"><button id="ai-check" class="button secondary">Check AI connection</button></div>
+          <p class="ai-privacy">Optional AI uses OpenAI and may incur API charges. Only fictional planner settings are sent; saved community records stay on this device. Local briefs work without AI. <a href="https://github.com/berzi05/HollowSignal#optional-ai-response-briefs" target="_blank" rel="noopener noreferrer">Enable AI ↗</a></p>
+          <p id="ai-feedback" class="ai-feedback" role="status"></p>
+          <p id="ai-stale" class="route-warning" role="status" hidden>The plan has changed. Generate a new brief before copying or downloading.</p>
+          <div id="ai-output" class="ai-output" hidden>
+            <span id="ai-source" class="ai-source"></span><p id="ai-snapshot" class="ai-snapshot"></p>
+            <p id="ai-summary" class="ai-summary"></p><ol id="ai-priorities" class="ai-priorities" aria-label="Response priorities and calculated sources"></ol>
+            <span class="eyebrow muted">RESIDENT MESSAGE · REVIEW BEFORE SHARING</span><blockquote id="ai-message" class="ai-message"></blockquote>
+            <ul id="ai-warnings" class="ai-warnings" aria-label="Planning limits"></ul>
+            <div class="ai-actions"><button id="ai-copy" class="button secondary" disabled>Copy brief</button><button id="ai-export" class="button secondary" disabled>Download brief ↓</button></div>
+          </div>
+        </section>
       </section>
       <section id="view-resources" class="view" aria-label="Resource allocation" hidden>
         <div class="resource-intro"><div><span class="section-index">02 / SHARED SURVIVAL</span><h2>Scarcity is real.<br>Who gets help shouldn’t be a mystery.</h2><p>Protect an essential share for every level, then prioritize unmet need, vulnerability, and current hazards. Every unit is accounted for.</p></div><div class="principle"><span>01</span><b>Essentials first</b><p>Short supply is shared in proportion to essential need.</p><span>02</span><b>Need over privilege</b><p>The remainder follows vulnerability and risk, capped at each level’s demand.</p></div></div>
