@@ -4,7 +4,7 @@
 
 Built for the **Life underground** hackathon track, Hollow Signal connects early warnings, fair resource planning, refuge routes, care access, and community check-ins. It models six neighborhoods and 19,000 fictional residents in one sector of the Hollow.
 
-The app works online and can keep working offline after its application cache installs. Its calculations and local records work without an API key or account; sharing between devices uses manually transferred relay files. An optional **OpenAI response brief** explains a calculated crisis plan and drafts a resident message, with a local brief available when AI is unavailable.
+The app works online and can keep working offline after its application cache installs. Its calculations and local records work without an API key or account; sharing between devices uses manually transferred relay files. An optional **Google Gemini response brief** explains a calculated crisis plan and drafts a resident message, with a local brief available when AI is unavailable.
 
 ## What you can do
 
@@ -72,7 +72,7 @@ Use this browser address to run the app; double-clicking `dist/index.html` does 
 
 For a first look, select **Explore a blackout**, or open **Health & aid → Load sample health signals**. All sample conditions are fictional.
 
-The server serves the app and an optional AI endpoint. Saved resident records stay in the browser. Only an explicit **Explain with AI** request sends the fictional planner settings to the local server, which calculates the source facts and sends those facts to OpenAI. After downloading the project and installing Node.js, the core app and local briefs work without an internet connection.
+The server serves the app and an optional AI endpoint. Saved resident records stay in the browser. Only an explicit **Explain with AI** request sends the fictional planner settings to the local server, which calculates the source facts and sends those facts to Google Gemini. After downloading the project and installing Node.js, the core app and local briefs work without an internet connection.
 
 ### Get the latest updates
 
@@ -105,24 +105,24 @@ Updating the app does not require clearing saved records. Keep using the same br
 
 In **Crisis planner → AI response brief**, choose **Explain with AI** to get a plain-language summary, three explained priorities, and a resident-message draft. Calculated source facts and warnings appear alongside the AI text. **Copy brief** and **Download brief** include those sources and warnings.
 
-The integration uses the [OpenAI Responses API](https://developers.openai.com/api/docs/quickstart) and [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs). The default model is [`gpt-6.2-sol`](https://developers.openai.com/api/docs/models/gpt-6.2-sol). A live request requires internet access, a valid OpenAI API key, access to that model, and API billing or credits. Usage may incur charges.
+The integration uses the [Gemini Interactions API](https://aistudio.google.com/docs/interactions-overview) and [structured outputs](https://aistudio.google.com/docs/structured-output). The default model is [`gemini-4-hydrogen`](https://aistudio.google.com/docs/models/gemini-4-hydrogen). A live request requires internet access, a valid Gemini API key, model access, and available project quota. Usage may incur charges depending on your API tier. The integration uses Node's built-in `fetch`; no SDK installation is required.
 
 ### Enable AI locally
 
-1. Create an API key in the [OpenAI API dashboard](https://platform.openai.com/api-keys).
+1. Create an API key in [Google AI Studio](https://aistudio.google.com/api-keys).
 2. In the project folder containing `server.mjs`, copy **`.env.example` to `.env`**. Use your file manager, or `Copy-Item .env.example .env` in PowerShell / `cp .env.example .env` on macOS or Linux. Skip copying if you already have a `.env` file so you preserve its settings.
 3. Open `.env` in a text editor and fill in your key:
 
    ```dotenv
-   OPENAI_API_KEY=your_api_key_here
-   OPENAI_MODEL=gpt-6.2-sol
+   GEMINI_API_KEY=your_api_key_here
+   GEMINI_MODEL=gemini-4-hydrogen
    ```
 
 4. Save the file as exactly `.env`, not `.env.txt`. Keep the key out of `dist/`, browser fields, relay files, screenshots, and Git commits. `.env` is ignored by Git; `.env.example` contains no secret.
 5. Stop the server with **Ctrl + C**, run **`npm start`** again from this project folder, and open **[http://127.0.0.1:3000/](http://127.0.0.1:3000/)**.
-6. Open **Crisis planner → AI response brief**, then select **Check AI connection** and **Explain with AI**. “Configured” only means a key is present; “OpenAI responded successfully” confirms a completed request.
+6. Open **Crisis planner → AI response brief**, then select **Check AI connection** and **Explain with AI**. “Configured” only means a key is present; “Gemini responded successfully” and a **Gemini draft** confirm a completed request. A local brief remains explicitly labeled as local.
 
-Existing environment variables take precedence over `.env`. To change the model, set `OPENAI_MODEL` to a Responses-compatible model supporting structured outputs and low reasoning effort, then restart the server.
+Existing environment variables take precedence over `.env`. To change the model, set `GEMINI_MODEL` to a Gemini Interactions-compatible model supporting structured outputs and a low thinking level, then restart the server. Older OpenAI configuration is no longer read. If the page reports an older AI server, stop that process with **Ctrl + C** and run `npm start` again from the updated folder.
 
 ### What AI adds, and what stays calculated
 
@@ -134,11 +134,11 @@ Existing environment variables take precedence over `.env`. To change the model,
 
 The API accepts only the seven planner settings. The server independently recalculates facts using the same engine as the browser. It does not accept prompts, check-ins, call signs, field reports, health notes, clinic updates, or aid requests. AI cannot modify allocations, invent a usable route in the planner, reserve capacity, prescribe care, or dispatch help.
 
-The key stays on the Node server. Requests use `store: false`; this is not a promise that the provider retains no data under its own policies. The local endpoint allows one generation at a time and at most five attempts per minute, caps output, times out after 30 seconds, and reuses successful identical snapshots for five minutes in server memory. Clicking **Stop waiting** discards the answer in the browser; a provider request already sent may still finish and incur usage.
+The key stays on the Node server and is sent to Google in the `x-goog-api-key` header, never in a URL or browser asset. Requests use `store: false`; this is not a promise that the provider retains no data under its own policies. The local endpoint allows one generation at a time and at most five attempts per minute, caps output, times out after 30 seconds, and reuses successful identical snapshots for five minutes in server memory. Clicking **Stop waiting** discards the answer in the browser; a provider request already sent may still finish and incur usage.
 
 **Static hosting:** `dist/` can still be hosted independently and supports local briefs, but static hosting cannot run the AI endpoint. This implementation intentionally restricts AI access to the computer running Node via localhost. Public AI hosting would need an authenticated backend and per-user usage controls; uploading `.env` or putting the key in frontend JavaScript is not a deployment option.
 
-If AI falls back to a local brief, check that you restarted the correct server after editing `.env`. For provider errors, check key validity, model access, API balance, and the computer's network connection. Community records and the rest of the app remain usable.
+If AI falls back to a local brief, check that you restarted the correct server after editing `.env`. Access errors indicate a key or project-permission problem; quota errors mean the provider's quota or rate limit was reached. Also check model access and the computer's network connection. Community records and the rest of the app remain usable.
 
 ## Using the app
 
@@ -258,7 +258,7 @@ If an older cached page has no update controls, use **Ctrl + Shift + R** once. F
 | `dist/sw.js` | Versioned offline shell and cache-readiness checks |
 | `dist/updates.js` | Update checks and detection of a complete newer offline cache |
 | `server.mjs` | Local app server with path isolation and optional `.env` loading |
-| `ai.mjs` | Local-only OpenAI endpoint, structured output validation, request limits, and in-memory caching |
+| `ai.mjs` | Local-only Gemini endpoint, structured output validation, request limits, and in-memory caching |
 | `.env.example` | Optional AI configuration template; copy to the untracked `.env` file |
 | `test/` | Model, integration, navigation, relay, server, and offline-asset tests |
 

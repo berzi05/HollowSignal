@@ -110,7 +110,7 @@ if (isEntryPoint()) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new TypeError('PORT must be an integer from 1 to 65535');
   }
-  const server = createStaticServer(ROOT, { apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL });
+  const server = createStaticServer(ROOT, { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL });
   server.on('error', error => {
     console.error(`Hollow Signal could not start: ${error.message}`);
     process.exitCode = 1;

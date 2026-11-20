@@ -58,7 +58,7 @@ function harness(initialHash = '', initialRecords, options = {}) {
   // Supply the real modules through the VM context instead of ESM imports.
   const context = vm.createContext({
     ...engine, ...relay, ...crisis, ...health, ...brief, createUpdateMonitor, document, location,
-    AbortController, AbortSignal, fetch: options.fetch || (async () => new Response('{"configured":false}')),
+    AbortController, AbortSignal, fetch: options.fetch || (async () => new Response('{"configured":false,"provider":"Gemini"}')),
     Event: class { constructor(type) { this.type = type; } },
     FormData: class {
       *[Symbol.iterator]() {
@@ -281,7 +281,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   const handlers = new Map();
   const worker = revision => ({ postMessage(message, ports) { ports[0].postMessage({ type: message.type, revision, ready: true }); } });
   const serviceWorker = {
-    controller: worker('v10'),
+    controller: worker('v11'),
     addEventListener: (name, handler) => handlers.set(name, handler),
     register: async () => ({ update: async () => {} }),
   };
@@ -292,7 +292,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   app.fire('#checkin-form', 'submit');
   const before = app.records();
   app.get('#checkin-note').value = 'An unfinished draft';
-  serviceWorker.controller = worker('v11');
+  serviceWorker.controller = worker('v12');
   await handlers.get('controllerchange')();
   assert.equal(app.get('#reload-update').hidden, false);
   assert.match(app.get('#connection-status').textContent, /Update ready/);
@@ -310,7 +310,7 @@ test('planner offers a useful local brief and invalidates it when the route chan
   let paidCalls = 0;
   const app = harness('#response', undefined, { fetch: async (url, options) => {
     if (options.method === 'POST') paidCalls++;
-    return new Response('{"configured":false}');
+    return new Response('{"configured":false,"provider":"Gemini"}');
   } });
   await app.aiReady();
   app.fire('#drill-respond', 'click');
@@ -331,17 +331,17 @@ test('planner offers a useful local brief and invalidates it when the route chan
 
 test('AI UI sends only planner settings, renders returned text safely, and labels real AI separately', async () => {
   const app = harness('#response', undefined, { fetch: async (url, options) => {
-    if (url.endsWith('/status')) return new Response('{"configured":true}');
+    if (url.endsWith('/status')) return new Response('{"configured":true,"provider":"Gemini"}');
     const inputs = JSON.parse(options.body);
     assert.deepEqual(Object.keys(inputs), ['scenario', 'minutes', 'supply', 'origin', 'groupSize', 'stepFree', 'closedEdges']);
     const context = brief.buildBriefContext(inputs);
     const answer = brief.createLocalBrief(context);
     answer.priorities[0].explanation = '<img src=x onerror=alert(1)>';
-    return new Response(JSON.stringify({ source: 'ai', key: context.key, model: 'test-model', brief: answer, cached: false }));
+    return new Response(JSON.stringify({ source: 'ai', provider: 'Gemini', key: context.key, model: 'test-model', brief: answer, cached: false }));
   } });
   await app.aiReady();
   await app.fire('#ai-generate', 'click');
-  assert.match(app.get('#ai-source').textContent, /AI draft · test-model/);
+  assert.match(app.get('#ai-source').textContent, /Gemini draft · test-model/);
   assert.match(app.get('#ai-priorities').innerHTML, /&lt;img/);
   assert.doesNotMatch(app.get('#ai-priorities').innerHTML, /<img/);
   assert.equal(app.get('#ai-copy').disabled, false);
@@ -351,7 +351,7 @@ test('AI UI sends only planner settings, renders returned text safely, and label
 test('an AI response for an earlier plan is discarded even if its transport ignores cancellation', async () => {
   let resolveCall, received;
   const app = harness('#response', undefined, { fetch: async (url, options) => {
-    if (url.endsWith('/status')) return new Response('{"configured":true}');
+    if (url.endsWith('/status')) return new Response('{"configured":true,"provider":"Gemini"}');
     received = JSON.parse(options.body);
     return new Promise(resolve => { resolveCall = resolve; });
   } });
@@ -360,7 +360,7 @@ test('an AI response for an earlier plan is discarded even if its transport igno
   const pending = app.fire('#ai-generate', 'click');
   app.fire('#response-time', 'input', { value: '30' });
   const context = brief.buildBriefContext(received);
-  resolveCall(new Response(JSON.stringify({ source: 'ai', key: context.key, model: 'test-model', brief: brief.createLocalBrief(context) })));
+  resolveCall(new Response(JSON.stringify({ source: 'ai', provider: 'Gemini', key: context.key, model: 'test-model', brief: brief.createLocalBrief(context) })));
   await pending;
   assert.match(app.get('#ai-source').textContent, /Local brief/);
   assert.equal(app.get('#ai-stale').hidden, false);
@@ -374,7 +374,7 @@ test('missing backend, missing key and invalid AI output visibly fall back to lo
     () => new Response('{"error":"not_configured"}', { status: 503 }),
     () => new Response('{"source":"ai","key":"wrong","model":"test","brief":{}}'),
   ]) {
-    const app = harness('#response', undefined, { fetch: async (url) => url.endsWith('/status') ? new Response('{"configured":false}') : reply() });
+    const app = harness('#response', undefined, { fetch: async (url) => url.endsWith('/status') ? new Response('{"configured":false,"provider":"Gemini"}') : reply() });
     await app.aiReady();
     await app.fire('#ai-generate', 'click');
     assert.match(app.get('#ai-source').textContent, /Local brief/);
@@ -382,4 +382,17 @@ test('missing backend, missing key and invalid AI output visibly fall back to lo
     assert.equal(app.get('#ai-generate').disabled, false);
     assert.equal(app.get('#ai-copy').disabled, false);
   }
+});
+
+test('a server from before the Gemini migration is identified instead of mislabeled as Gemini', async () => {
+  const app = harness('#response', undefined, { fetch: async (url, options) => {
+    if (url.endsWith('/status')) return new Response('{"configured":true,"provider":"OpenAI"}');
+    const context = brief.buildBriefContext(JSON.parse(options.body));
+    return new Response(JSON.stringify({ source: 'ai', provider: 'OpenAI', model: 'legacy-model', key: context.key, brief: brief.createLocalBrief(context) }));
+  } });
+  await app.aiReady();
+  assert.match(app.get('#ai-connection').textContent, /older AI server.*Restart/);
+  await app.fire('#ai-generate', 'click');
+  assert.match(app.get('#ai-source').textContent, /Local brief/);
+  assert.match(app.get('#ai-feedback').textContent, /Restart npm start to enable Gemini/);
 });

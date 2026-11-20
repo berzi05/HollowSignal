@@ -8,6 +8,10 @@ const ERRORS = {
   busy: 'AI is busy or the request limit was reached. Try again in a minute.',
   timeout: 'AI took too long to respond.',
   provider_unavailable: 'The AI provider could not complete the request. Check the server’s key, model access, and API balance.',
+  provider_auth: 'Gemini rejected access. Check the API key and its project permissions.',
+  provider_quota: 'Gemini’s quota or rate limit was reached. Check your project quota or try again later.',
+  provider_model: 'This Gemini model is unavailable for your project. Check GEMINI_MODEL on the server.',
+  provider_mismatch: 'An older AI server is running. Restart npm start to enable Gemini.',
   invalid_response: 'AI did not return a usable brief.',
 };
 
@@ -64,7 +68,7 @@ export function initAiBrief({ getInputs, download, toast, fetchImpl = globalThis
       if (!response.ok) throw new Error();
       const data = await response.json();
       if (ticket !== statusSequence) return;
-      $('#ai-connection').textContent = data.configured === true ? 'OpenAI configured · connection tested when you generate' : 'AI not configured · local briefs available';
+      $('#ai-connection').textContent = data.provider !== 'Gemini' ? ERRORS.provider_mismatch : data.configured === true ? 'Gemini configured · connection tested when you generate' : 'Gemini not configured · local briefs available';
     } catch {
       if (ticket === statusSequence) $('#ai-connection').textContent = 'AI server unavailable · local briefs available';
     }
@@ -86,12 +90,13 @@ export function initAiBrief({ getInputs, download, toast, fetchImpl = globalThis
       });
       const data = await response.json();
       if (!response.ok) throw new Error(ERRORS[data.error] || 'The AI service is unavailable.');
+      if (data.provider !== 'Gemini') throw new Error(ERRORS.provider_mismatch);
       if (data.source !== 'ai' || data.key !== context.key || typeof data.model !== 'string' || data.model.length > 100) throw new Error(ERRORS.invalid_response);
       validateAiBrief(data.brief);
       if (ticket !== sequence || context.key !== briefKey(getInputs())) return;
-      display(context, data.brief, 'ai', `AI draft · ${data.model}${data.cached ? ' · reused snapshot' : ''}`);
+      display(context, data.brief, 'ai', `Gemini draft · ${data.model}${data.cached ? ' · reused snapshot' : ''}`);
       $('#ai-feedback').textContent = 'AI draft ready. Check the calculated sources and warnings before sharing.';
-      $('#ai-connection').textContent = 'OpenAI responded successfully';
+      $('#ai-connection').textContent = 'Gemini responded successfully';
     } catch (error) {
       if (ticket !== sequence || context.key !== briefKey(getInputs())) return;
       display(context, createLocalBrief(context), 'local', 'Local brief · calculated rules, no AI');

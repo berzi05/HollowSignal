@@ -1,6 +1,6 @@
 import { buildBriefContext, FACT_IDS, validateAiBrief } from './dist/brief.js';
 
-export const DEFAULT_MODEL = 'gpt-6.2-sol';
+export const DEFAULT_MODEL = 'gemini-4-hydrogen';
 const MAX_BODY = 4096;
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -70,7 +70,7 @@ async function readInputs(request) {
 
 /** Inject transport/time in tests; credentials never enter browser assets or API responses. */
 export function createAiHandler({ apiKey = '', model = DEFAULT_MODEL, fetchImpl = globalThis.fetch, now = Date.now, timeoutMs = 30000 } = {}) {
-  const configured = Boolean(apiKey.trim()) && !/^(your_|replace|sk-your)/i.test(apiKey.trim());
+  const configured = Boolean(apiKey.trim()) && !/^(your_|replace)/i.test(apiKey.trim());
   const cache = new Map();
   let busy = false, attempts = [];
   return async (request, response) => {
@@ -78,7 +78,7 @@ export function createAiHandler({ apiKey = '', model = DEFAULT_MODEL, fetchImpl 
     if (!path?.startsWith('/api/')) return false;
     if (!isLocalRequest(request)) { json(response, 403, { error: 'local_only' }); return true; }
     if (path === '/api/ai/status' && request.method === 'GET') {
-      json(response, 200, { configured, provider: 'OpenAI', model: configured ? model : null }); return true;
+      json(response, 200, { configured, provider: 'Gemini', model: configured ? model : null }); return true;
     }
     if (path !== '/api/ai/brief') { json(response, 404, { error: 'not_found' }); return true; }
     if (request.method !== 'POST') {
@@ -98,17 +98,22 @@ export function createAiHandler({ apiKey = '', model = DEFAULT_MODEL, fetchImpl 
       const signal = AbortSignal.timeout(timeoutMs);
       let upstream;
       try {
-        upstream = await fetchImpl('https://api.openai.com/v1/responses', {
+        upstream = await Promise.resolve().then(() => fetchImpl('https://generativelanguage.googleapis.com/v1beta/interactions', {
           method: 'POST', redirect: 'error', signal,
-          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json', 'Api-Revision': '2026-05-20' },
           body: JSON.stringify({
-            model, store: false, max_output_tokens: 2400, reasoning: { effort: 'low' },
-            instructions: INSTRUCTIONS,
+            model, store: false,
+            generation_config: { max_output_tokens: 2400, thinking_level: 'low', thinking_summaries: 'none' },
+            system_instruction: INSTRUCTIONS,
             input: JSON.stringify({ label: context.label, facts: context.facts, warnings: context.warnings }),
-            text: { format: { type: 'json_schema', name: 'hollow_response_brief', strict: true, schema: SCHEMA } },
+            response_format: { type: 'text', mime_type: 'application/json', schema: SCHEMA },
           }),
-        });
-        if (!upstream.ok) { await upstream.body?.cancel(); throw failure('provider_unavailable', 502); }
+        })).catch(() => { throw failure('provider_unavailable', 502); });
+        if (!upstream.ok) {
+          await upstream.body?.cancel();
+          const code = [401, 403].includes(upstream.status) ? 'provider_auth' : upstream.status === 429 ? 'provider_quota' : upstream.status === 404 ? 'provider_model' : 'provider_unavailable';
+          throw failure(code, 502);
+        }
         // Bound response size even when the provider returns an unexpected payload.
         let size = 0, chunks = [];
         for await (const chunk of upstream.body) {
@@ -117,13 +122,12 @@ export function createAiHandler({ apiKey = '', model = DEFAULT_MODEL, fetchImpl 
           chunks.push(chunk);
         }
         const result = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        if (result.status !== 'completed' || !Array.isArray(result.output)) throw failure('invalid_response', 502);
-        const content = result.output.filter(item => item.type === 'message' && item.role === 'assistant').flatMap(item => item.content || []);
-        if (content.some(item => item.type === 'refusal')) throw failure('invalid_response', 502);
-        const texts = content.filter(item => item.type === 'output_text');
-        if (texts.length !== 1) throw failure('invalid_response', 502);
-        const brief = validateAiBrief(JSON.parse(texts[0].text));
-        const value = { source: 'ai', model, brief, key: context.key, generatedAt: new Date(now()).toISOString(), cached: false };
+        if (result.status !== 'completed' || !Array.isArray(result.steps) || result.steps.some(item => !['thought', 'model_output'].includes(item.type))) throw failure('invalid_response', 502);
+        const outputs = result.steps.filter(item => item.type === 'model_output');
+        if (outputs.length !== 1 || !Array.isArray(outputs[0].content) || outputs[0].content.length === 0 ||
+            outputs[0].content.some(item => item.type !== 'text' || typeof item.text !== 'string')) throw failure('invalid_response', 502);
+        const brief = validateAiBrief(JSON.parse(outputs[0].content.map(item => item.text).join('')));
+        const value = { source: 'ai', provider: 'Gemini', model, brief, key: context.key, generatedAt: new Date(now()).toISOString(), cached: false };
         cache.set(context.key, { time: now(), value });
         if (cache.size > 20) cache.delete(cache.keys().next().value);
         json(response, 200, value);
