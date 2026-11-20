@@ -71,7 +71,7 @@ function harness(initialHash = '', initialRecords, options = {}) {
     localStorage: { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) },
     navigator: { onLine: true, ...(options.serviceWorker ? { serviceWorker: options.serviceWorker } : {}) },
     window: { isSecureContext: Boolean(options.serviceWorker), addEventListener: (name, handler) => handlers.set(name, handler), scrollTo() {}, confirm: () => options.confirm !== false },
-    setTimeout: () => 0, clearTimeout() {},
+    setTimeout: options.setTimeout || (() => 0), clearTimeout: options.clearTimeout || (() => {}),
   });
   context.initResponseLab = vm.runInContext('(() => {' + responseSource.replace(/^import .*;\r?\n/gm, '').replace('export function initResponseLab', 'function initResponseLab') + '; return initResponseLab; })()', context);
   context.initHealthAid = vm.runInContext('(() => {' + healthSource.replace(/^import .*;\r?\n/gm, '').replace('export function initHealthAid', 'function initHealthAid') + '; return initHealthAid; })()', context);
@@ -281,7 +281,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   const handlers = new Map();
   const worker = revision => ({ postMessage(message, ports) { ports[0].postMessage({ type: message.type, revision, ready: true }); } });
   const serviceWorker = {
-    controller: worker('v11'),
+    controller: worker('v12'),
     addEventListener: (name, handler) => handlers.set(name, handler),
     register: async () => ({ update: async () => {} }),
   };
@@ -292,7 +292,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   app.fire('#checkin-form', 'submit');
   const before = app.records();
   app.get('#checkin-note').value = 'An unfinished draft';
-  serviceWorker.controller = worker('v12');
+  serviceWorker.controller = worker('v13');
   await handlers.get('controllerchange')();
   assert.equal(app.get('#reload-update').hidden, false);
   assert.match(app.get('#connection-status').textContent, /Update ready/);
@@ -366,6 +366,70 @@ test('an AI response for an earlier plan is discarded even if its transport igno
   assert.equal(app.get('#ai-stale').hidden, false);
   assert.equal(app.get('#ai-copy').disabled, true);
   assert.match(app.get('#ai-feedback').textContent, /Plan changed/);
+});
+
+test('a local brief is usable immediately and stopping Gemini preserves it after a late reply', async () => {
+  let resolveCall, received, signal;
+  const app = harness('#response', undefined, { fetch: async (url, options) => {
+    if (url.endsWith('/status')) return new Response('{"configured":true,"provider":"Gemini"}');
+    received = JSON.parse(options.body);
+    signal = options.signal;
+    return new Promise(resolve => { resolveCall = resolve; });
+  } });
+  await app.aiReady();
+  const pending = app.fire('#ai-generate', 'click');
+  assert.equal(app.get('#ai-output').hidden, false);
+  assert.match(app.get('#ai-source').textContent, /Local brief/);
+  assert.match(app.get('#ai-feedback').textContent, /Local brief ready below/);
+  assert.equal(app.get('#ai-copy').disabled, false);
+  assert.equal(app.get('#ai-export').disabled, false);
+  assert.equal(app.get('#ai-generate').disabled, true);
+  const localSummary = app.get('#ai-summary').textContent;
+  app.fire('#ai-cancel', 'click');
+  assert.equal(signal.aborted, true);
+  assert.equal(app.get('#ai-generate').disabled, false);
+  assert.equal(app.get('#ai-cancel').hidden, true);
+  const context = brief.buildBriefContext(received);
+  resolveCall(new Response(JSON.stringify({ source: 'ai', provider: 'Gemini', key: context.key, model: 'test', brief: { ...brief.createLocalBrief(context), summary: 'Late answer' } })));
+  await pending;
+  assert.equal(app.get('#ai-summary').textContent, localSummary);
+  assert.match(app.get('#ai-source').textContent, /Local brief/);
+  assert.match(app.get('#ai-feedback').textContent, /Stopped waiting/);
+});
+
+test('the browser wait limit clears the spinner and late replies cannot affect a newer request', async () => {
+  const timers = new Map(), requests = [];
+  let timerId = 0;
+  const app = harness('#response', undefined, {
+    setTimeout: (callback, ms) => { const id = ++timerId; timers.set(id, { callback, ms }); return id; },
+    clearTimeout: id => timers.delete(id),
+    fetch: async (url, options) => {
+      if (url.endsWith('/status')) return new Response('{"configured":true,"provider":"Gemini"}');
+      return new Promise(resolve => requests.push({ resolve, signal: options.signal, context: brief.buildBriefContext(JSON.parse(options.body)) }));
+    },
+  });
+  await app.aiReady();
+  const first = app.fire('#ai-generate', 'click');
+  [...timers.values()].find(timer => timer.ms === 4000).callback();
+  assert.match(app.get('#ai-feedback').textContent, /read, copy, or download/);
+  [...timers.values()].find(timer => timer.ms === 14000).callback();
+  assert.equal(requests[0].signal.aborted, true);
+  assert.equal(app.get('#ai-generate').disabled, false);
+  assert.equal(app.get('#ai-copy').disabled, false);
+  assert.match(app.get('#ai-feedback').textContent, /14-second wait limit/);
+  assert.equal(timers.size, 0);
+  const second = app.fire('#ai-generate', 'click');
+  const answer = request => new Response(JSON.stringify({ source: 'ai', provider: 'Gemini', key: request.context.key, model: 'test', brief: brief.createLocalBrief(request.context) }));
+  requests[0].resolve(answer(requests[0]));
+  await first;
+  assert.match(app.get('#ai-source').textContent, /Local brief/);
+  assert.equal(app.get('#ai-generate').disabled, true);
+  assert.equal(timers.size, 2, 'the old request must not clear the new request’s deadline');
+  requests[1].resolve(answer(requests[1]));
+  await second;
+  assert.match(app.get('#ai-source').textContent, /Gemini draft/);
+  assert.match(app.get('#ai-feedback').textContent, /ready in .*s/);
+  assert.equal(timers.size, 0);
 });
 
 test('missing backend, missing key and invalid AI output visibly fall back to local rules', async () => {

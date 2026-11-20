@@ -103,9 +103,9 @@ Updating the app does not require clearing saved records. Keep using the same br
 
 ## Optional AI response briefs
 
-In **Crisis planner → AI response brief**, choose **Explain with AI** to get a plain-language summary, three explained priorities, and a resident-message draft. Calculated source facts and warnings appear alongside the AI text. **Copy brief** and **Download brief** include those sources and warnings.
+In **Crisis planner → AI response brief**, choose **Explain with AI** to get a plain-language summary, three explained priorities, and a resident-message draft. A clearly labeled local brief appears immediately and can be read, copied, or downloaded while Gemini works. A successful Gemini answer replaces it and shows the elapsed time. Calculated source facts and warnings accompany both versions. **Copy brief** and **Download brief** include those sources and warnings.
 
-The integration uses the [Gemini Interactions API](https://aistudio.google.com/docs/interactions-overview) and [structured outputs](https://aistudio.google.com/docs/structured-output). The default model is [`gemini-4-hydrogen`](https://aistudio.google.com/docs/models/gemini-4-hydrogen). A live request requires internet access, a valid Gemini API key, model access, and available project quota. Usage may incur charges depending on your API tier. The integration uses Node's built-in `fetch`; no SDK installation is required.
+The integration uses the [Gemini Interactions API](https://aistudio.google.com/docs/interactions-overview) and [structured outputs](https://aistudio.google.com/docs/structured-output). The default model is [`gemini-3.5-flash-lite`](https://aistudio.google.com/docs/models/gemini-3.5-flash-lite), with minimal thinking and short output for these calculated-plan explanations. A live request requires internet access, a valid Gemini API key, model access, and available project quota. Usage may incur charges depending on your API tier. The integration uses Node's built-in `fetch`; no SDK installation is required.
 
 ### Enable AI locally
 
@@ -115,14 +115,14 @@ The integration uses the [Gemini Interactions API](https://aistudio.google.com/d
 
    ```dotenv
    GEMINI_API_KEY=your_api_key_here
-   GEMINI_MODEL=gemini-4-hydrogen
+   GEMINI_MODEL=gemini-3.5-flash-lite
    ```
 
 4. Save the file as exactly `.env`, not `.env.txt`. Keep the key out of `dist/`, browser fields, relay files, screenshots, and Git commits. `.env` is ignored by Git; `.env.example` contains no secret.
 5. Stop the server with **Ctrl + C**, run **`npm start`** again from this project folder, and open **[http://127.0.0.1:3000/](http://127.0.0.1:3000/)**.
 6. Open **Crisis planner → AI response brief**, then select **Check AI connection** and **Explain with AI**. “Configured” only means a key is present; “Gemini responded successfully” and a **Gemini draft** confirm a completed request. A local brief remains explicitly labeled as local.
 
-Existing environment variables take precedence over `.env`. To change the model, set `GEMINI_MODEL` to a Gemini Interactions-compatible model supporting structured outputs and a low thinking level, then restart the server. Older OpenAI configuration is no longer read. If the page reports an older AI server, stop that process with **Ctrl + C** and run `npm start` again from the updated folder.
+Existing environment variables take precedence over `.env`. If upgrading from the earlier Gemini setup, change `GEMINI_MODEL` in your existing `.env` to `gemini-3.5-flash-lite`; updating `.env.example` alone does not change your running model. The connection status displays the model loaded by the server. Other Gemini Interactions-compatible models must support structured outputs and a low thinking level; custom models use low thinking instead of the default model's minimal setting. Restart the server after configuration changes. Older OpenAI configuration is no longer read. If the page reports an older AI server, stop that process with **Ctrl + C** and run `npm start` again from the updated folder.
 
 ### What AI adds, and what stays calculated
 
@@ -134,7 +134,7 @@ Existing environment variables take precedence over `.env`. To change the model,
 
 The API accepts only the seven planner settings. The server independently recalculates facts using the same engine as the browser. It does not accept prompts, check-ins, call signs, field reports, health notes, clinic updates, or aid requests. AI cannot modify allocations, invent a usable route in the planner, reserve capacity, prescribe care, or dispatch help.
 
-The key stays on the Node server and is sent to Google in the `x-goog-api-key` header, never in a URL or browser asset. Requests use `store: false`; this is not a promise that the provider retains no data under its own policies. The local endpoint allows one generation at a time and at most five attempts per minute, caps output, times out after 30 seconds, and reuses successful identical snapshots for five minutes in server memory. Clicking **Stop waiting** discards the answer in the browser; a provider request already sent may still finish and incur usage.
+The key stays on the Node server and is sent to Google in the `x-goog-api-key` header, never in a URL or browser asset. Requests use `store: false`; this is not a promise that the provider retains no data under its own policies. The local endpoint allows one generation at a time and at most five attempts per minute, limits generation to 1,200 output tokens, and reuses successful identical snapshots for five minutes in server memory. The entire provider request, including reading its response, has a 12-second deadline. The browser stops waiting after 14 seconds even if the server stalls, leaving the local brief usable. There are no automatic paid retries. **Stop waiting**, changing the plan, or closing the page cancels the local request; the server aborts its provider connection and releases its request slot. Google may still finish work already received and charge for that usage.
 
 **Static hosting:** `dist/` can still be hosted independently and supports local briefs, but static hosting cannot run the AI endpoint. This implementation intentionally restricts AI access to the computer running Node via localhost. Public AI hosting would need an authenticated backend and per-user usage controls; uploading `.env` or putting the key in frontend JavaScript is not a deployment option.
 

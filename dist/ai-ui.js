@@ -17,6 +17,7 @@ const ERRORS = {
 
 export function initAiBrief({ getInputs, download, toast, fetchImpl = globalThis.fetch }) {
   let current = null, pending = null, sequence = 0, statusSequence = 0;
+  let waitTimer, progressTimer;
   let knownKey = briefKey(getInputs());
 
   function controls() {
@@ -25,9 +26,9 @@ export function initAiBrief({ getInputs, download, toast, fetchImpl = globalThis
     $('#ai-generate').textContent = pending ? 'Writing AI brief…' : 'Explain with AI';
     $('#ai-cancel').hidden = !pending;
     $('#ai-stale').hidden = !stale;
-    $('#ai-export').disabled = !current || stale || Boolean(pending);
-    $('#ai-copy').disabled = !current || stale || Boolean(pending);
-    $('#ai-output').setAttribute('aria-busy', String(Boolean(pending)));
+    $('#ai-export').disabled = !current || stale;
+    $('#ai-copy').disabled = !current || stale;
+    $('#ai-output').setAttribute('aria-busy', String(Boolean(pending) && !current));
   }
 
   function display(context, brief, source, label) {
@@ -45,8 +46,14 @@ export function initAiBrief({ getInputs, download, toast, fetchImpl = globalThis
     controls();
   }
 
+  function clearWaitTimers() {
+    clearTimeout(waitTimer); clearTimeout(progressTimer);
+    waitTimer = progressTimer = undefined;
+  }
+
   function cancel() {
     sequence++;
+    clearWaitTimers();
     pending?.abort(); pending = null;
     controls();
   }
@@ -68,7 +75,8 @@ export function initAiBrief({ getInputs, download, toast, fetchImpl = globalThis
       if (!response.ok) throw new Error();
       const data = await response.json();
       if (ticket !== statusSequence) return;
-      $('#ai-connection').textContent = data.provider !== 'Gemini' ? ERRORS.provider_mismatch : data.configured === true ? 'Gemini configured · connection tested when you generate' : 'Gemini not configured · local briefs available';
+      const modelLabel = typeof data.model === 'string' && data.model.length <= 100 ? ` · ${data.model}` : '';
+      $('#ai-connection').textContent = data.provider !== 'Gemini' ? ERRORS.provider_mismatch : data.configured === true ? `Gemini configured${modelLabel} · connection tested when you generate` : 'Gemini not configured · local briefs available';
     } catch {
       if (ticket === statusSequence) $('#ai-connection').textContent = 'AI server unavailable · local briefs available';
     }
@@ -79,10 +87,18 @@ export function initAiBrief({ getInputs, download, toast, fetchImpl = globalThis
     const context = buildBriefContext(getInputs());
     const ticket = sequence;
     const controller = new AbortController();
+    const startedAt = Date.now();
     pending = controller;
-    controls();
-    $('#ai-feedback').textContent = 'Explaining this snapshot. Only fictional planner settings are sent.';
-    const timer = setTimeout(() => controller.abort(), 35000);
+    display(context, createLocalBrief(context), 'local', 'Local brief · calculated rules, no AI');
+    $('#ai-feedback').textContent = 'Local brief ready below. Gemini is preparing a short explanation…';
+    progressTimer = setTimeout(() => {
+      if (ticket === sequence) $('#ai-feedback').textContent = 'Gemini is still responding. You can read, copy, or download the local brief now.';
+    }, 4000);
+    waitTimer = setTimeout(() => {
+      if (ticket !== sequence) return;
+      cancel();
+      $('#ai-feedback').textContent = 'Gemini reached the 14-second wait limit. The local brief remains ready to use.';
+    }, 14000);
     try {
       const response = await fetchImpl('./api/ai/brief', {
         method: 'POST', cache: 'no-store', signal: controller.signal,
@@ -95,7 +111,8 @@ export function initAiBrief({ getInputs, download, toast, fetchImpl = globalThis
       validateAiBrief(data.brief);
       if (ticket !== sequence || context.key !== briefKey(getInputs())) return;
       display(context, data.brief, 'ai', `Gemini draft · ${data.model}${data.cached ? ' · reused snapshot' : ''}`);
-      $('#ai-feedback').textContent = 'AI draft ready. Check the calculated sources and warnings before sharing.';
+      const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+      $('#ai-feedback').textContent = `Gemini brief ready in ${seconds}s. Check the calculated sources and warnings before sharing.`;
       $('#ai-connection').textContent = 'Gemini responded successfully';
     } catch (error) {
       if (ticket !== sequence || context.key !== briefKey(getInputs())) return;
@@ -103,25 +120,24 @@ export function initAiBrief({ getInputs, download, toast, fetchImpl = globalThis
       const message = controller.signal.aborted ? ERRORS.timeout : (Object.values(ERRORS).includes(error.message) ? error.message : 'AI could not be reached.');
       $('#ai-feedback').textContent = `${message} Showing a local brief instead.`;
     } finally {
-      clearTimeout(timer);
-      if (ticket === sequence) { pending = null; controls(); }
+      if (ticket === sequence) { clearWaitTimers(); pending = null; controls(); }
     }
   }
 
   function exportText() {
     refreshContext();
-    if (!current || pending || current.context.key !== knownKey) return null;
+    if (!current || current.context.key !== knownKey) return null;
     return formatBriefText(current.context, current.brief, current.label);
   }
 
   $('#ai-generate').addEventListener('click', generate);
   $('#ai-check').addEventListener('click', checkStatus);
-  $('#ai-cancel').addEventListener('click', () => { cancel(); $('#ai-feedback').textContent = 'Stopped waiting for AI. You can create a local brief now.'; });
+  $('#ai-cancel').addEventListener('click', () => { cancel(); $('#ai-feedback').textContent = 'Stopped waiting for Gemini. The local brief is ready to use.'; });
   $('#ai-local').addEventListener('click', () => {
     cancel();
     const context = buildBriefContext(getInputs());
     display(context, createLocalBrief(context), 'local', 'Local brief · calculated rules, no AI');
-    $('#ai-feedback').textContent = 'Local brief ready. No AI request was made.';
+    $('#ai-feedback').textContent = 'Local brief ready. Calculated on this device.';
   });
   $('#ai-export').addEventListener('click', () => {
     const text = exportText();

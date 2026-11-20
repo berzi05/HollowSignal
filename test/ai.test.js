@@ -52,11 +52,11 @@ test('real endpoint calls Gemini with calculated facts only, validates output an
       assert.ok(!url.includes('test-secret'), 'the key stays out of URL/query logs');
       const payload = JSON.parse(options.body);
       assert.equal(payload.store, false);
-      assert.equal(payload.model, 'gemini-4-hydrogen');
+      assert.equal(payload.model, 'gemini-3.5-flash-lite');
       assert.equal(payload.response_format.mime_type, 'application/json');
       assert.equal(payload.response_format.schema.additionalProperties, false);
-      assert.equal(payload.generation_config.max_output_tokens, 2400);
-      assert.equal(payload.generation_config.thinking_level, 'low');
+      assert.equal(payload.generation_config.max_output_tokens, 1200);
+      assert.equal(payload.generation_config.thinking_level, 'minimal');
       assert.match(payload.system_instruction, /fictional underground-survival rehearsal/);
       const factPayload = JSON.parse(payload.input);
       assert.deepEqual(Object.keys(factPayload), ['label', 'facts', 'warnings']);
@@ -135,14 +135,68 @@ test('Gemini output can span text blocks without exposing its thought step', asy
   assert.doesNotMatch(body, /Private reasoning/);
 });
 
-test('provider timeout ends the request, releases concurrency and does not leak errors', async t => {
+test('provider timeout releases concurrency even if the transport ignores cancellation', { timeout: 2000 }, async t => {
   let calls = 0;
   const app = await serve(t, { apiKey: 'test', timeoutMs: 15, fetchImpl: async (url, { signal }) => {
     calls++;
     if (calls > 1) return completion(validBrief);
-    return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(new Error('secret details')), { once: true }));
+    return new Promise(() => {});
   } });
-  assert.equal((await app.post()).status, 504);
+  const response = await app.post();
+  assert.equal(response.status, 504);
+  assert.deepEqual(await response.json(), { error: 'timeout' });
+  assert.equal((await app.post()).status, 200);
+});
+
+test('the same deadline bounds a stalled provider body and cancels its reader', { timeout: 2000 }, async t => {
+  let calls = 0, cancelled = false;
+  const app = await serve(t, { apiKey: 'test', timeoutMs: 20, fetchImpl: async () => {
+    if (++calls > 1) return completion(validBrief);
+    return new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode('{"status":')); },
+      cancel() { cancelled = true; },
+    }));
+  } });
+  const response = await app.post();
+  assert.equal(response.status, 504);
+  assert.deepEqual(await response.json(), { error: 'timeout' });
+  assert.equal(cancelled, true);
+  assert.equal((await app.post()).status, 200);
+});
+
+test('closing the browser request aborts Gemini and frees the server for the next plan', { timeout: 2000 }, async t => {
+  const started = Promise.withResolvers(), cancelled = Promise.withResolvers();
+  let calls = 0;
+  const app = await serve(t, { apiKey: 'test', fetchImpl: async (url, { signal }) => {
+    if (++calls > 1) return completion(validBrief);
+    started.resolve();
+    return new Promise((resolve, reject) => signal.addEventListener('abort', () => {
+      cancelled.resolve(); reject(signal.reason);
+    }, { once: true }));
+  } });
+  const controller = new AbortController();
+  const pending = app.get('/api/ai/brief', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inputs), signal: controller.signal,
+  });
+  const rejected = assert.rejects(pending, { name: 'AbortError' });
+  await started.promise;
+  controller.abort();
+  await rejected;
+  await cancelled.promise;
+  await new Promise(resolve => setImmediate(resolve));
+  const response = await app.post({ ...inputs, minutes: 25 });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).cached, false);
+  assert.equal(calls, 2);
+});
+
+test('custom reasoning models retain a supported low thinking level', async t => {
+  const app = await serve(t, { apiKey: 'test', model: 'gemini-4-hydrogen', fetchImpl: async (url, { body }) => {
+    const payload = JSON.parse(body);
+    assert.equal(payload.model, 'gemini-4-hydrogen');
+    assert.equal(payload.generation_config.thinking_level, 'low');
+    return completion(validBrief);
+  } });
   assert.equal((await app.post()).status, 200);
 });
 
