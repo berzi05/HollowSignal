@@ -1,5 +1,5 @@
 import { LEVELS, RESOURCE_RULES, getScenarioLevels, assessLevel, getSummary, allocateResource, createCheckIn, mergeCheckIns } from './engine.js';
-import { createReport, mergeReports, parsePacket, serializePacket } from './relay.js';
+import { REPORT_TYPES, createReport, mergeReports, parsePacket, serializePacket } from './relay.js';
 import { initResponseLab } from './response-ui.js';
 import { initHealthAid } from './health-ui.js';
 import { createUpdateMonitor } from './updates.js';
@@ -17,8 +17,8 @@ const fmt = (n, digits = 0) => {
 const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const storageKey = 'hollow-signal-v1';
 // Must match REVISION in sw.js (enforced by test/sw.test.js).
-const CACHE_REVISION = 'v12';
-const DEFAULTS = Object.freeze({ scenario: 'baseline', selected: 'L20', resource: 'power' });
+const CACHE_REVISION = 'v13';
+const DEFAULTS = Object.freeze({ scenario: 'baseline', selected: 'L20', selectedHazard: '', resource: 'power' });
 const state = { ...DEFAULTS, supply: 1140, checkIns: [], reports: [], healthReports: [], clinicUpdates: [], aidRequests: [] };
 const VIEWS = {
   health: { heading: 'Care should reach every level', description: 'Review community health signals, find available aid, and carry requests to the people who can help.', crumb: 'HEALTH & AID', title: 'Health & aid' },
@@ -37,6 +37,8 @@ let currentView;
 let responseLab;
 let healthLab;
 let aiBrief;
+let showAllReports = false;
+const INITIAL_LOG_SIZE = 8;
 const scenarioNotes = {
   baseline: '',
   blackout: 'Geothermal outage simulated: power coverage drops 34 points from L08 down. Ventilation weakens and battery reserves shrink. Review the deepest levels first.',
@@ -70,10 +72,14 @@ function restore() {
     if (raw) Object.assign(state, parsePacket(raw));
   } catch { toast('Saved records could not be read. The app is running with an empty local relay.'); }
 }
-function levelOptions() {
+function populateOptions() {
   const options = LEVELS.map(l => `<option value="${l.id}">${l.id} · ${l.name}</option>`).join('');
+  const types = Object.entries(REPORT_TYPES).map(([type, label]) => `<option value="${type}">${label}</option>`).join('');
   $('#checkin-level').innerHTML = options;
   $('#report-level').innerHTML = options;
+  $('#report-type').innerHTML = types;
+  $('#log-level').innerHTML = '<option value="">All neighborhoods</option>' + options;
+  $('#log-type').innerHTML = '<option value="">All incident types</option>' + types;
   $('#checkin-level').value = 'L12';
   $('#report-level').value = state.selected;
 }
@@ -112,29 +118,75 @@ function renderMap() {
     return `<button class="level-row ${risk.severity} ${state.selected === l.id ? 'selected' : ''}" data-level="${l.id}" aria-pressed="${state.selected === l.id}" aria-label="Inspect ${l.id}, ${l.name}, ${risk.severity}"><span class="depth">−${l.depth}m</span><span class="shaft" aria-hidden="true"></span><span class="level-segment"><span class="level-id">${l.id}</span><span class="level-name">${l.name}</span><span class="level-power" aria-hidden="true">${Array.from({ length: 10 }, (_, i) => `<i class="${i < Math.round(l.power / 10) ? 'on' : ''}"></i>`).join('')}</span><span class="level-status">${risk.severity}</span><span class="level-arrow" aria-hidden="true">↗</span></span></button>`;
   }).join('');
 }
-function selectLevel(id) {
+function selectLevel(id, hazard = '') {
   state.selected = id;
-  renderMap();
+  state.selectedHazard = hazard;
+  for (const button of $$('#level-map [data-level]')) {
+    const selected = button.dataset.level === id;
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  }
   renderDetail();
+  const detail = $('#level-detail');
+  detail.focus({ preventScroll: true });
+  detail.scrollIntoView({ block: 'start' });
 }
 function renderAlerts() {
-  const priorities = { power: 0, water: 1, air: 2, heat: 3 };
-  const warnings = levels.flatMap(l => assessLevel(l).warnings.map(w => ({ ...w, level: l })));
-  warnings.sort((a, b) => (a.severity === 'critical' ? 0 : 1) - (b.severity === 'critical' ? 0 : 1) || priorities[a.type] - priorities[b.type] || b.level.depth - a.level.depth);
-  // Show one of each hazard, so cascading failures remain visible.
-  const chosen = [...new Set(warnings.map(w => w.type))].map(type => warnings.find(w => w.type === type)).slice(0, 3);
+  const categories = [
+    { type: 'power', label: 'Power reserves', icon: 'ϟ' },
+    { type: 'water', label: 'Water quality', icon: '◈' },
+    { type: 'air', label: 'Air & ventilation', icon: '≈' },
+    { type: 'heat', label: 'Heat & cooling', icon: '♨' },
+  ];
+  const scenarioHazard = { blackout: 'power', water: 'water', heat: 'heat' }[state.scenario];
+  const warnings = levels.flatMap(level => assessLevel(level).warnings.map(warning => ({ ...warning, level })));
+  warnings.sort((a, b) => Number(b.severity === 'critical') - Number(a.severity === 'critical') || b.level.depth - a.level.depth);
+  const groups = categories.map(category => {
+    const rows = warnings.filter(warning => warning.type === category.type);
+    const critical = rows.filter(warning => warning.severity === 'critical').length;
+    return { ...category, rows, critical };
+  }).filter(group => group.rows.length);
+  groups.sort((a, b) => Number(b.critical > 0) - Number(a.critical > 0)
+    || Number(b.type === scenarioHazard) - Number(a.type === scenarioHazard)
+    || b.critical - a.critical);
   $('#alert-count').textContent = warnings.length;
-  $('#alert-count').setAttribute('aria-label', `${warnings.length} warnings across all levels; showing ${chosen.length} priority signal${chosen.length === 1 ? '' : 's'}`);
-  const icons = { power: 'ϟ', air: '≈', water: '◈', heat: '♨' };
-  $('#alerts').innerHTML = chosen.map(w => `<article class="alert ${w.severity}"><span class="alert-icon" aria-hidden="true">${icons[w.type]}</span><div><div class="alert-title"><h3>${w.title}</h3><span class="alert-level">${w.level.id}</span></div><p>${esc(w.detail)}</p><button class="alert-action" data-inspect="${w.level.id}">Inspect level & response <span>→</span></button></div></article>`).join('');
+  $('#alert-count').setAttribute('aria-label', `${warnings.length} neighborhood warnings`);
+  $('#alerts').innerHTML = groups.map((group, index) => {
+    const watch = group.rows.length - group.critical;
+    const counts = [group.critical && `${group.critical} critical`, watch && `${watch} on watch`].filter(Boolean).join(' · ');
+    const rows = group.rows.map(warning => `<li><button type="button" data-inspect="${warning.level.id}" data-hazard="${group.type}" aria-controls="level-detail">
+      <span><b>${warning.level.id} · ${esc(warning.level.name)}</b><small>${esc(warning.detail)}</small></span>
+      <span class="signal-severity ${warning.severity}">${warning.severity} <span aria-hidden="true">→</span><span class="sr-only">. Inspect neighborhood</span></span>
+    </button></li>`).join('');
+    return `<details class="signal-group ${group.critical ? 'critical' : 'watch'}"${index === 0 ? ' open' : ''}>
+      <summary><span class="alert-icon" aria-hidden="true">${group.icon}</span><span><strong>${esc(group.label)}</strong><small>${counts}</small></span><span class="signal-chevron" aria-hidden="true">⌄</span></summary>
+      <ul aria-label="${esc(group.label)} warnings">${rows}</ul></details>`;
+  }).join('') || '<p>No modeled warnings for this scenario.</p>';
 }
 function renderDetail() {
   const l = levels.find(l => l.id === state.selected);
   const r = assessLevel(l);
   const reserve = r.blackoutMinutes === null ? 'No reserve draw at full supply' : `${fmt(r.blackoutMinutes)} min modeled reserve`;
   const stats = [['POWER COVERAGE', `${l.power}%`, reserve], ['OXYGEN', `${l.air.toFixed(1)}%`, `${fmt(l.co2)} ppm CO₂`], ['TEMPERATURE', `${l.temp.toFixed(1)}°C`, l.temp >= 34 ? 'Critical heat signal' : 'Neighborhood sensor'], ['WATER INDEX', `${l.water}<small> / 100</small>`, l.water < 60 ? 'Testing required' : 'Synthetic sensor index']];
-  $('#level-detail').innerHTML = `<div><div class="eyebrow muted">SELECTED NEIGHBORHOOD · ${l.id}</div><div class="detail-title"><h2>${l.name}</h2><span class="status-tag ${r.severity}">${r.severity}</span></div><p>${fmt(l.population)} residents · ${l.depth} m below surface</p></div><div class="detail-stats">${stats.map(s => `<div class="detail-stat"><span>${s[0]}</span><b>${s[1]}</b><p>${s[2]}</p></div>`).join('')}</div><div class="detail-actions"><strong>COMMUNITY RESPONSE</strong> &nbsp; ${r.warnings.length ? r.warnings.map(w => esc(w.action)).join(' ') : 'Keep monitoring local sensors and check that shared reserves are accessible.'}</div>`;
-  $('#level-detail').innerHTML += `<div class="detail-plan-action"><button class="button secondary compact" data-health-origin="${l.id}">Find aid for ${l.id} →</button><button class="button secondary compact" data-plan-level="${l.id}">Plan for ${l.id} →</button></div>`;
+  const selected = r.warnings.find(warning => warning.type === state.selectedHazard);
+  const ordered = selected ? [selected, ...r.warnings.filter(warning => warning !== selected)] : r.warnings;
+  const actions = ordered.map(warning => `<li><b>${esc(warning.title)}</b> ${esc(warning.action)}</li>`).join('');
+  const reportsLabel = selected ? REPORT_TYPES[selected.type] + ' reports' : 'Field reports';
+  $('#level-detail').innerHTML = `<div>
+      <div class="eyebrow muted">SELECTED NEIGHBORHOOD · ${l.id}</div>
+      <div class="detail-title"><h2 id="selected-level-name">${esc(l.name)}</h2><span class="status-tag ${r.severity}">${r.severity}</span></div>
+      <p>${fmt(l.population)} residents · ${l.depth} m below surface</p>
+      <button type="button" id="return-to-map" class="detail-back">← Choose another level</button>
+    </div>
+    <div class="detail-stats">${stats.map(s => `<div class="detail-stat"><span>${s[0]}</span><b>${s[1]}</b><p>${s[2]}</p></div>`).join('')}</div>
+    <div class="detail-actions"><h3>Community response</h3>
+      ${actions ? `<ul>${actions}</ul>` : '<p>Keep monitoring local sensors and check that shared reserves are accessible.</p>'}
+    </div>
+    <div class="detail-plan-action">
+      <button class="button secondary compact" data-health-origin="${l.id}">Find aid for ${l.id} →</button>
+      <button class="button secondary compact" data-plan-level="${l.id}">Plan for ${l.id} →</button>
+      <button class="button secondary compact" data-reports-level="${l.id}" data-reports-type="${selected?.type ?? ''}">${reportsLabel} for ${l.id} →</button>
+    </div>`;
 }
 function configureResource() {
   const rule = RESOURCE_RULES[state.resource];
@@ -169,7 +221,46 @@ function renderCheckIns() {
 }
 function renderReports() {
   const records = state.reports.slice(0, 3);
-  $('#report-list').innerHTML = records.length ? records.map(r => `<div class="field-report"><span class="report-dot" aria-hidden="true"></span><div><p>${esc(r.detail)}</p><small>${r.level} · ${esc(r.type)} · ${esc(timeLabel(r.updatedAt))} · unverified</small></div></div>`).join('') : `<div class="field-empty"><p>No local reports yet. What you notice in your tunnel could help the next neighborhood.</p><button class="alert-action" id="first-report">Add a field report →</button></div>`;
+  $('#report-list').innerHTML = records.length ? records.map(r => `<div class="field-report"><span class="report-dot" aria-hidden="true"></span><div><p>${esc(r.detail)}</p><small>${r.level} · ${REPORT_TYPES[r.type]} · ${esc(timeLabel(r.updatedAt))} · unverified</small></div></div>`).join('') : `<div class="field-empty"><p>No observations saved yet.</p><button class="alert-action" id="first-report">Add a field report →</button></div>`;
+  $('#overview-reports').hidden = records.length === 0;
+  renderReportLog();
+}
+function renderReportLog() {
+  const level = $('#log-level').value;
+  const type = $('#log-type').value;
+  const query = $('#log-search').value.trim().toLowerCase();
+  const matches = state.reports.filter(report =>
+    (!level || report.level === level) && (!type || report.type === type) && report.detail.toLowerCase().includes(query));
+  const visible = showAllReports ? matches : matches.slice(0, INITIAL_LOG_SIZE);
+  const noun = matches.length === 1 ? 'report' : 'reports';
+  $('#log-count').textContent = matches.length
+    ? `Showing ${visible.length} of ${matches.length} ${noun} · newest first`
+    : state.reports.length ? 'No reports match these filters.' : 'No field reports yet. Add an observation or import a relay packet.';
+  $('#log-clear').hidden = !(level || type || query);
+  $('#log-expand').hidden = matches.length <= INITIAL_LOG_SIZE;
+  $('#log-expand').setAttribute('aria-expanded', String(showAllReports));
+  $('#log-expand').textContent = showAllReports ? 'Show fewer reports' : `Show all ${matches.length} reports`;
+  $('#log-rows').innerHTML = visible.map(report => `<li tabindex="-1">
+    <div class="log-metadata"><strong>${report.level} · ${REPORT_TYPES[report.type]}</strong><time datetime="${report.updatedAt}">${esc(timeLabel(report.updatedAt))}</time></div>
+    <p>${esc(report.detail)}</p></li>`).join('');
+}
+function resetReportFilters(level = '', type = '') {
+  $('#log-level').value = level;
+  $('#log-type').value = type;
+  $('#log-search').value = '';
+  showAllReports = false;
+}
+function focusReportLog() {
+  const log = $('#report-log');
+  log.focus({ preventScroll: true });
+  log.scrollIntoView({ block: 'start' });
+}
+function openReportLog(level, type) {
+  resetReportFilters(level, type);
+  renderReportLog();
+  location.hash = 'community';
+  showView();
+  focusReportLog();
 }
 function renderSituation() { renderMetrics(); renderMap(); renderAlerts(); renderDetail(); renderAllocation(); responseLab?.render(); }
 function download(name, contents) {
@@ -178,16 +269,29 @@ function download(name, contents) {
   anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function openReport() { $('#report-level').value = state.selected; $('#report-dialog').showModal(); }
+function openReport(level = state.selected, type) {
+  $('#report-level').value = level;
+  if (type) $('#report-type').value = type;
+  $('#report-error').hidden = true;
+  $('#report-dialog').showModal();
+}
 function updateConnection() {
   const status = updateAvailable ? 'Update ready · reload when you’re ready' : offlineReady ? (navigator.onLine ? 'Offline cache ready' : 'Offline · cache ready') : (navigator.onLine ? 'Local relay available' : 'Offline · cache unverified');
   $('#offline-status').textContent = status;
   $('#connection-status').textContent = status;
 }
 
-restore(); levelOptions(); configureResource(); renderSituation(); renderCheckIns(); renderReports(); showView();
+restore(); populateOptions(); configureResource(); renderSituation(); renderCheckIns(); renderReports(); showView();
 window.addEventListener('hashchange', showView);
 $('#level-detail').addEventListener('click', event => {
+  if (event.target.closest('#return-to-map')) {
+    const button = $(`#level-map [data-level="${state.selected}"]`);
+    button.focus({ preventScroll: true });
+    button.scrollIntoView({ block: 'center' });
+    return;
+  }
+  const reports = event.target.closest('[data-reports-level]');
+  if (reports) { openReportLog(reports.dataset.reportsLevel, reports.dataset.reportsType); return; }
   const aid = event.target.closest('[data-health-origin]');
   if (aid) { healthLab.setOrigin(aid.dataset.healthOrigin); location.hash = 'health'; showView(); healthLab.focusSection('health-aid'); return; }
   const button = event.target.closest('[data-plan-level]');
@@ -205,12 +309,31 @@ $('#level-map').addEventListener('click', event => {
 $('#alerts').addEventListener('click', event => {
   const button = event.target.closest('[data-inspect]');
   if (!button) return;
-  selectLevel(button.dataset.inspect);
-  $('#level-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  selectLevel(button.dataset.inspect, button.dataset.hazard);
 });
 $('#report-list').addEventListener('click', event => { if (event.target.closest('#first-report')) openReport(); });
+$('#overview-reports').addEventListener('click', () => openReportLog());
+$('#community-reports').addEventListener('click', focusReportLog);
+$('#log-add').addEventListener('click', () => openReport($('#log-level').value || state.selected, $('#log-type').value));
+const filterReports = () => { showAllReports = false; renderReportLog(); };
+$('#log-level').addEventListener('change', filterReports);
+$('#log-type').addEventListener('change', filterReports);
+$('#log-search').addEventListener('input', filterReports);
+$('#log-clear').addEventListener('click', () => {
+  resetReportFilters();
+  renderReportLog();
+  $('#log-level').focus();
+});
+$('#log-expand').addEventListener('click', () => {
+  showAllReports = !showAllReports;
+  renderReportLog();
+  if (!showAllReports) { focusReportLog(); return; }
+  const next = $(`#log-rows li:nth-child(${INITIAL_LOG_SIZE + 1})`);
+  next.focus({ preventScroll: true });
+  next.scrollIntoView({ block: 'start' });
+});
 $('#scenario').addEventListener('change', event => {
-  state.scenario = event.target.value; levels = getScenarioLevels(state.scenario);
+  state.scenario = event.target.value; state.selectedHazard = ''; levels = getScenarioLevels(state.scenario);
   $('#scenario-note').textContent = scenarioNotes[state.scenario];
   $('#scenario-note').hidden = state.scenario === 'baseline';
   renderSituation();
@@ -238,7 +361,7 @@ $('#checkin-form').addEventListener('submit', event => {
   } catch (error) { toast(error.message); }
 });
 $('#checkin-search').addEventListener('input', renderCheckIns);
-$('#report-button').addEventListener('click', openReport);
+$('#report-button').addEventListener('click', () => openReport());
 $('#about-button').addEventListener('click', () => $('#about-dialog').showModal());
 $$('.close-dialog').forEach(el => el.addEventListener('click', () => el.closest('dialog').close()));
 $$('dialog').forEach(dialog => dialog.addEventListener('click', event => { if (event.target === dialog) { const r = dialog.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close(); } }));
@@ -249,13 +372,17 @@ $('#report-form').addEventListener('submit', event => {
     const persisted = commit(state.checkIns, mergeReports(state.reports, [record]));
     renderReports(); $('#report-dialog').close(); $('#report-detail').value = '';
     if (persisted) toast('Unverified field report saved locally. Include it in your next relay packet.');
-  } catch (error) { toast(error.message); }
+  } catch (error) {
+    $('#report-error').hidden = false;
+    $('#report-error').textContent = error.message;
+  }
 });
 function exportRelay() {
   try { download('hollow-relay.json', serializePacket(state.checkIns, state.reports, state)); toast('Relay packet exported with check-ins, reports, health tallies, clinic snapshots, and aid requests.'); }
   catch (error) { toast(`Export failed: ${error.message}`); }
 }
 $('#export-relay').addEventListener('click', exportRelay);
+$('#log-export').addEventListener('click', exportRelay);
 $('#import-relay').addEventListener('click', () => $('#import-file').click());
 $('#import-file').addEventListener('change', async event => {
   const file = event.target.files[0]; if (!file) return;
@@ -272,7 +399,8 @@ $('#reset-button').addEventListener('click', () => {
   if (!window.confirm('Clear all local check-ins, reports, health tallies, clinic updates, and aid requests? Export a relay packet first if you want to keep them.')) return;
   Object.assign(state, DEFAULTS);
   levels = getScenarioLevels(state.scenario); $('#scenario').value = state.scenario; $('#resource').value = state.resource; $('#scenario-note').hidden = true; $('#checkin-search').value = '';
-  const persisted = commit([], [], { healthReports: [], clinicUpdates: [], aidRequests: [] }); configureResource(); renderSituation(); renderCheckIns(); renderReports();
+  const persisted = commit([], [], { healthReports: [], clinicUpdates: [], aidRequests: [] });
+  resetReportFilters(); configureResource(); renderSituation(); renderCheckIns(); renderReports();
   responseLab?.reset();
   healthLab?.reset();
   if (persisted) toast('Demo reset. Local records cleared.');

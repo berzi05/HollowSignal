@@ -4,13 +4,16 @@ import { mergeHealthReports, mergeClinicUpdates, mergeAidRequests } from './heal
 
 const MAX_PACKET_BYTES = 256 * 1024;
 const LEVEL_IDS = new Set(LEVELS.map(level => level.id));
-const REPORT_TYPES = new Set(['water', 'power', 'air', 'heat', 'tunnel']);
+export const REPORT_TYPES = Object.freeze({
+  water: 'Water quality', power: 'Power outage', air: 'Air or ventilation',
+  heat: 'Extreme heat', tunnel: 'Blocked tunnel',
+});
 const encoder = new TextEncoder();
 
 function validateReport(record) {
   validateRecordId(record, 'report');
   if (!LEVEL_IDS.has(record.level)) throw new TypeError('Unknown report level.');
-  if (!REPORT_TYPES.has(record.type)) throw new TypeError('Unknown report type.');
+  if (typeof record.type !== 'string' || !Object.hasOwn(REPORT_TYPES, record.type)) throw new TypeError('Unknown report type.');
   if (typeof record.detail !== 'string' || record.detail.length > 240) throw new TypeError('Report details must contain 1–240 characters.');
   const detail = record.detail.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/gu, '').trim();
   if (!detail) throw new TypeError('Report details are required.');

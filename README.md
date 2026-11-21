@@ -144,7 +144,7 @@ If AI falls back to a local brief, check that you restarted the correct server a
 
 The five main tabs have visible labels on desktop, tablet, and phone layouts. Overview includes task shortcuts, and the planning pages provide section jumps.
 
-1. **Inspect a neighborhood.** Choose a power, water, or heat scenario and select a level on Overview. Read the warnings and their causes.
+1. **Inspect a neighborhood.** Choose a scenario on Overview. Expand a category under **Priority signals** to see every affected neighborhood. Select a reading to inspect the neighborhood, plan aid, or open its field reports.
 2. **Plan a response.** Use **Plan for this level** to open the Crisis planner. Adjust time, available power, group size, tunnel access, and step-free requirements. Jump to **AI response brief** for an explained plan and message draft, or use **Create local brief** without AI.
 3. **Share supplies.** Open Share supplies to compare power, water, or food allocations and export a plan.
 4. **Find care.** Use **Find aid** or open Health & aid. Add a daily tally or choose **Load sample health signals**, then select **Plan aid** beside a neighborhood.
@@ -213,7 +213,9 @@ Saved requests retain the need, group size, proposed clinic and route when avail
 
 ### Check-ins and community relay
 
-Check-ins store a call sign, level, safe/help/moving status, optional message, and timestamp. Updating the same local call sign updates its record. Field reports capture unverified observations about water, power, air, heat, or tunnels; they do not automatically change sensor readings or route closures.
+Check-ins store a call sign, level, safe/help/moving status, optional message, and timestamp. Updating the same local call sign updates its record.
+
+Overview previews the three latest field reports. In **Community → Browse field reports**, filter the full log by neighborhood and incident type, or search the observation text. Opening the log from a warning selects its neighborhood and hazard. **Add field report** carries those filters into the form. Reports are unverified observations about water, power, air, heat, or tunnels. The simulator uses its own readings and route settings. **Export full relay packet** includes all saved record types and neighborhoods regardless of the current filters.
 
 Relay packets carry check-ins, field reports, health tallies, clinic snapshots, and aid requests. Import validates the whole packet before accepting changes. Records merge by ID and timestamp, with deterministic conflict handling and a 200-record limit per kind. The merged state must fit the **256 KiB** packet limit.
 

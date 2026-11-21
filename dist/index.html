@@ -42,10 +42,12 @@
         <div class="metrics" id="metrics"></div>
         <div class="overview-grid">
           <section class="panel map-panel"><div class="panel-heading"><div><div class="eyebrow muted">BENEATH THE SURFACE</div><h2>The pulse of Sector 07</h2></div><span class="small-label">6 CONNECTED LEVELS</span></div><div class="map-legend"><span><i class="legend-dot stable"></i>Stable</span><span><i class="legend-dot watch"></i>Watch</span><span><i class="legend-dot critical"></i>Critical</span><span class="map-hint">Select a level to inspect ↗</span></div><div class="surface"><span>UNINHABITABLE SURFACE</span><div class="surface-line"></div><span>0 m</span></div><div id="level-map" class="level-map"></div><div class="map-footer"><span>↓ DEPTH INCREASES</span><span>Community sensor snapshot · demo</span></div></section>
-          <section class="panel alerts-panel"><div class="panel-heading"><div><div class="eyebrow muted">ACT BEFORE IT FAILS</div><h2>Priority signals <span id="alert-count" class="count-pill"></span></h2></div><span class="signal-lines">▂▄▆</span></div><div id="alerts"></div><a class="panel-link" href="#resources">Make a resource plan <span>↗</span></a></section>
+          <section class="panel alerts-panel"><div class="panel-heading"><h2>Priority signals <span id="alert-count" class="count-pill"></span></h2></div><div id="alerts"></div><a class="panel-link" href="#resources">Make a resource plan <span>↗</span></a></section>
         </div>
-        <section class="panel level-detail" id="level-detail" aria-live="polite"></section>
-        <div class="bottom-grid"><section class="relay-callout"><div class="orbital" aria-hidden="true"><i></i><i></i><b>◎</b></div><div><div class="eyebrow">A SIGNAL THAT STAYS</div><h2>When the network goes dark,<br>your community doesn’t have to.</h2><p>Save a check-in locally. Carry it to the next connected device.</p><a href="#community" class="text-link">Open community relay <span>→</span></a></div></section><section class="panel field-panel"><div class="eyebrow muted">FROM THE TUNNELS</div><h2>Community field reports</h2><div id="report-list"></div></section></div>
+        <section class="panel level-detail" id="level-detail" tabindex="-1" aria-labelledby="selected-level-name"></section>
+        <div class="bottom-grid"><section class="relay-callout"><div class="orbital" aria-hidden="true"><i></i><i></i><b>◎</b></div><div><div class="eyebrow">A SIGNAL THAT STAYS</div><h2>When the network goes dark,<br>your community doesn’t have to.</h2><p>Save a check-in locally. Carry it to the next connected device.</p><a href="#community" class="text-link">Open community relay <span>→</span></a></div></section>
+          <section class="panel field-panel"><h2>Latest field reports</h2><div id="report-list"></div><button type="button" id="overview-reports" class="button secondary compact" hidden>View all field reports →</button></section>
+        </div>
       </section>
       <section id="view-response" class="view" aria-label="Crisis planner" hidden>
         <div class="response-intro"><div><div class="eyebrow">A REHEARSAL FOR THE PEOPLE BELOW</div><h2>The next 120 minutes<br>are a series of choices.</h2><p>Explore one connected response to a failing plant. Every number below is recalculated from the same fictional scenario.</p></div><button class="button secondary" id="export-response">Export response brief ↓</button></div>
@@ -91,7 +93,7 @@
         <nav class="planner-nav" aria-label="Within health and aid"><span>Jump to</span><button data-health-target="health-signals">Health signals</button><button data-health-target="health-clinics">Clinics & stock</button><button data-health-target="health-aid">Request aid</button></nav>
         <div class="health-metrics"><div><strong id="health-signal-count">0</strong><span>neighborhood increases to review</span></div><div><strong id="health-review-count">0</strong><span>current tallies awaiting local review</span></div><p>Community observations, not diagnoses. “Reviewed locally” records a person’s review; it does not authenticate a source or confirm an outbreak.</p></div>
         <section class="panel health-section" id="health-signals" tabindex="-1">
-          <div class="panel-heading"><div><div class="eyebrow muted">09 / SEE WHAT THE NEIGHBORHOOD SEES</div><h2>Respiratory health signals</h2></div><span class="model-tag">FICTIONAL REHEARSAL</span></div>
+          <div class="panel-heading"><h2>Respiratory health signals</h2><span class="model-tag">FICTIONAL REHEARSAL</span></div>
           <p class="health-note" id="health-window"></p>
           <div class="table-scroll"><table class="health-table"><thead><tr><th scope="col">NEIGHBORHOOD</th><th scope="col">PRIOR DAY</th><th scope="col">TODAY</th><th scope="col">SIGNAL / EVIDENCE</th><th scope="col">NEXT STEP</th></tr></thead><tbody id="health-rows"></tbody></table></div>
           <p class="health-note">Counts = people reporting respiratory symptoms / people observed. Demo review rule: at least 5 reports and a reporting rate at least twice the prior day’s rate, with an actual increase. Uneven sampling and incomplete days can distort comparisons. No tally means unknown.</p>
@@ -111,7 +113,7 @@
           <details class="health-editor"><summary>Inspect recent evidence, sources, and review notes</summary><ul class="health-records" id="health-records"></ul></details>
         </section>
         <section class="panel health-section" id="health-clinics" tabindex="-1">
-          <div class="panel-heading"><div><div class="eyebrow muted">10 / FIND THE GAPS IN CARE</div><h2>Clinics & supply gaps</h2></div><span class="model-tag">SNAPSHOTS</span></div>
+          <div class="panel-heading"><h2>Clinics & supply gaps</h2><span class="model-tag">SNAPSHOTS</span></div>
           <p class="health-note">Care places and stock are planning snapshots. Submitted updates older than six hours, or dated in the future, are excluded from route candidates. Confirm availability locally.</p>
           <div id="clinic-cards" class="clinic-grid"></div>
           <details id="clinic-editor" class="health-editor"><summary>Update a clinic snapshot</summary><form id="clinic-form" class="health-form">
@@ -136,13 +138,40 @@
         </section>
       </section>
       <section id="view-community" class="view" aria-label="Community relay" hidden>
-        <div class="relay-banner"><span class="relay-mark">◎</span><div><div class="eyebrow">NO ONE DISAPPEARS IN THE DARK</div><h2>A small message. A little less uncertainty.</h2><p>Check-ins stay on this device. Export a relay packet and import it on another device to carry the signal.</p></div><span class="local-pill">LOCAL-FIRST</span></div>
+        <div class="relay-banner"><span class="relay-mark" aria-hidden="true">◎</span><div><h2>Community relay</h2><p>Save a check-in or field report here. Carry updates between devices by exporting and importing a relay packet.</p></div><button type="button" id="community-reports" class="button secondary compact" aria-controls="report-log">Browse field reports ↓</button></div>
         <div class="community-grid"><section class="panel checkin-panel"><div class="eyebrow muted">LEAVE A SIGNAL</div><h2>How are you doing?</h2><form id="checkin-form"><label for="alias">Call sign <span>Use a nickname, not a full name</span></label><input id="alias" name="alias" required maxlength="40" placeholder="e.g. Lantern-17" autocomplete="nickname"><label for="checkin-level">Your level</label><select id="checkin-level" name="level"></select><fieldset><legend>Your status</legend><div class="status-options"><label><input type="radio" name="status" value="safe" checked><span>● I’m safe</span></label><label><input type="radio" name="status" value="help"><span>＋ Need help</span></label><label><input type="radio" name="status" value="moving"><span>↗ Moving</span></label></div></fieldset><label for="checkin-note">Message <span>Optional · avoid sensitive details</span></label><textarea id="checkin-note" name="note" rows="3" maxlength="180" placeholder="At the water station. Heading to L08."></textarea><button class="button primary full-width" type="submit">Save my check-in <span>→</span></button><p class="form-note">Stored on this device. Help requests need a person to relay them; this demo does not dispatch responders.</p></form></section><section class="panel checkins-panel"><div class="panel-heading"><div><div class="eyebrow muted">PEOPLE, NOT NUMBERS</div><h2>Neighborhood check-ins</h2></div><span id="checkin-count" class="count-pill">0</span></div><div class="relay-tools"><label class="sr-only" for="checkin-search">Search call signs</label><input type="search" id="checkin-search" placeholder="Search a call sign…"><button class="button secondary compact" id="export-relay">Export ↓</button><button class="button secondary compact" id="import-relay">Import ↑</button><input type="file" id="import-file" accept="application/json,.json" hidden></div><div id="checkin-list"></div><p class="packet-note">Relay packets include check-ins, incident reports, health tallies, clinic snapshots, and aid requests. Only share them with people you trust.</p></section></div>
+        <section class="panel report-log" id="report-log" tabindex="-1" aria-labelledby="log-heading">
+          <div class="log-heading">
+            <div><h2 id="log-heading">Field report log</h2><p>Unverified observations saved here or imported from a neighbor.</p></div>
+            <button type="button" class="button secondary compact" id="log-add">Add field report</button>
+          </div>
+          <div class="log-filters">
+            <div><label for="log-level">Neighborhood</label><select id="log-level"></select></div>
+            <div><label for="log-type">Incident type</label><select id="log-type"></select></div>
+            <div><label for="log-search">Search observations</label><input type="search" id="log-search" placeholder="e.g. pump, south stairwell"></div>
+          </div>
+          <div class="log-results"><p id="log-count" role="status"></p><button type="button" class="button secondary compact" id="log-clear" hidden>Clear filters</button></div>
+          <ul class="log-rows" id="log-rows" aria-label="Field reports, newest first"></ul>
+          <div class="log-actions">
+            <button type="button" class="button secondary compact" id="log-expand" aria-controls="log-rows" hidden>Show all reports</button>
+            <button type="button" class="button secondary compact" id="log-export">Export full relay packet ↓</button>
+          </div>
+        </section>
       </section>
       <footer><span><b>HOLLOW SIGNAL</b> / Built for the people below.</span><span>Life underground · Hackathon prototype <button id="reset-button">Clear local data</button></span></footer>
     </main>
   </div>
-  <dialog id="report-dialog"><form id="report-form"><div class="dialog-heading"><div><div class="eyebrow">COMMUNITY FIELD REPORT</div><h2>What’s happening?</h2></div><button type="button" class="icon-button close-dialog" aria-label="Close">×</button></div><label for="report-level">Affected level</label><select id="report-level" name="level"></select><label for="report-type">Incident type</label><select id="report-type" name="type"><option value="water">Water quality</option><option value="power">Power outage</option><option value="air">Air or ventilation</option><option value="heat">Extreme heat</option><option value="tunnel">Blocked tunnel</option></select><label for="report-detail">What did you observe?</label><textarea id="report-detail" name="detail" rows="4" required maxlength="240" placeholder="Share a location and a short observation. Avoid personal details."></textarea><p class="form-note">Reports are unverified observations stored locally. Export a relay packet to share them.</p><button type="submit" class="button primary full-width">Save field report →</button></form></dialog>
+  <dialog id="report-dialog" aria-labelledby="report-title">
+    <form id="report-form">
+      <div class="dialog-heading"><h2 id="report-title">Report an incident</h2><button type="button" class="icon-button close-dialog" aria-label="Close">×</button></div>
+      <label for="report-level">Affected level</label><select id="report-level" name="level"></select>
+      <label for="report-type">Incident type</label><select id="report-type" name="type"></select>
+      <label for="report-detail">What did you observe?</label><textarea id="report-detail" name="detail" rows="4" required maxlength="240" placeholder="Share a location and a short observation. Avoid personal details."></textarea>
+      <p class="form-note">Reports are unverified observations stored locally. Export a relay packet to share them.</p>
+      <p id="report-error" role="alert" hidden></p>
+      <button type="submit" class="button primary full-width">Save field report →</button>
+    </form>
+  </dialog>
   <dialog id="about-dialog"><div class="dialog-heading"><div><div class="eyebrow">LIFE UNDERGROUND</div><h2>A signal of our own.</h2></div><button class="icon-button close-dialog" aria-label="Close">×</button></div><p>Hollow Signal connects crisis rehearsal, equitable resource planning, refuge routing, community health signals, care logistics, and offline family check-ins in one community tool.</p><p>All environmental readings are fictional. Warning thresholds and allocations are transparent demonstration rules, not validated forecasts or safety guidance. Water scores cannot establish potability.</p><p>Data is stored in this browser, without encryption. Relay packets move manually between devices; there is no radio mesh, live sensor feed, or emergency dispatch service.</p><div class="about-tags"><span>01 Early warning</span><span>02 Fair allocation</span><span>03 Heat</span><span>04 Water</span><span>05 Tunnel access</span><span>06 Refuge capacity</span><span>07 Offline relay</span><span>08 Reconnection</span><span>09 Health signals</span><span>10 Care access</span></div><button class="button secondary close-dialog">Back to the Hollow</button></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
   <script type="module" src="./app.js"></script>

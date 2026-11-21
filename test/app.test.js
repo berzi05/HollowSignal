@@ -43,6 +43,8 @@ function harness(initialHash = '', initialRecords, options = {}) {
         querySelector: selector => document.querySelector(selector),
         focus() { this.focused = true; },
         scrollIntoView() { this.scrolled = true; },
+        showModal() { this.open = true; },
+        close() { this.open = false; },
         setAttribute() {},
         classList: { add() {}, remove() {} },
       });
@@ -61,7 +63,12 @@ function harness(initialHash = '', initialRecords, options = {}) {
     AbortController, AbortSignal, fetch: options.fetch || (async () => new Response('{"configured":false,"provider":"Gemini"}')),
     Event: class { constructor(type) { this.type = type; } },
     FormData: class {
+      constructor(form) { this.form = form; }
       *[Symbol.iterator]() {
+        if (this.form === document.querySelector('#report-form')) {
+          for (const key of ['level', 'type', 'detail']) yield [key, document.querySelector('#report-' + key).value];
+          return;
+        }
         yield ['alias', document.querySelector('#alias').value];
         yield ['level', document.querySelector('#checkin-level').value];
         yield ['note', document.querySelector('#checkin-note').value];
@@ -221,6 +228,85 @@ test('overview find-aid action carries the neighborhood and focuses care plannin
   assert.equal(app.get('#health-aid').focused, true);
 });
 
+test('Overview exposes every modeled warning and opens the relevant hazard for each crisis', () => {
+  const app = harness();
+  for (const [scenario, label] of [['heat', 'Heat &amp; cooling'], ['water', 'Water quality'], ['blackout', 'Power reserves']]) {
+    app.fire('#scenario', 'change', { value: scenario });
+    const html = app.get('#alerts').innerHTML;
+    const groups = [...html.matchAll(/<details\b([^>]*)>([\s\S]*?)<\/details>/g)];
+    assert.equal(groups.length, 4);
+    assert.match(groups[0][1], /\bopen\b/);
+    assert.ok(groups[0][2].includes(label));
+    const expected = engine.getScenarioLevels(scenario).flatMap(level => engine.assessLevel(level).warnings);
+    assert.equal([...html.matchAll(/data-inspect=/g)].length, expected.length);
+    assert.equal(Number(app.get('#alert-count').textContent), expected.length);
+  }
+  app.fire('#alerts', 'click', { closest: () => ({ dataset: { inspect: 'L16', hazard: 'heat' } }) });
+  assert.match(app.get('#level-detail').innerHTML, /Ember District/);
+  assert.match(app.get('#level-detail').innerHTML, /<ul><li><b>Heat accumulating/);
+  assert.match(app.get('#level-detail').innerHTML, /data-reports-type="heat"/);
+  assert.equal(app.get('#level-detail').focused, true);
+  app.fire('#level-detail', 'click', { closest: selector => selector === '#return-to-map' });
+  assert.equal(app.get('#level-map [data-level="L16"]').focused, true);
+});
+
+test('the report log can retrieve older relayed observations and filter by neighborhood, type and text', async () => {
+  const reports = Array.from({ length: 12 }, (_, i) => ({
+    id: 'field-report-' + i, type: i % 3 === 0 ? 'water' : 'tunnel', level: i % 2 === 0 ? 'L12' : 'L20',
+    updatedAt: new Date(Date.UTC(2026, 0, i + 1)).toISOString(), detail: i === 0 ? 'South pump <offline>' : 'Gate observation ' + i,
+  }));
+  const app = harness();
+  const packet = relay.serializePacket([], reports);
+  await app.fire('#import-file', 'change', { files: [{ size: packet.length, text: async () => packet }] });
+  assert.doesNotMatch(app.get('#report-list').innerHTML, /South pump/);
+  app.fire('#overview-reports', 'click');
+  assert.deepEqual(app.visible(), ['view-community']);
+  assert.match(app.get('#log-count').textContent, /8 of 12/);
+  app.fire('#log-expand', 'click');
+  assert.match(app.get('#log-count').textContent, /12 of 12/);
+  assert.match(app.get('#log-rows').innerHTML, /South pump &lt;offline&gt;/);
+  app.fire('#log-level', 'change', { value: 'L12' });
+  app.fire('#log-type', 'change', { value: 'water' });
+  assert.match(app.get('#log-count').textContent, /2 of 2/);
+  app.fire('#log-search', 'input', { value: '  PUMP  ' });
+  assert.match(app.get('#log-count').textContent, /1 of 1 report\b/);
+  assert.doesNotMatch(app.get('#log-rows').innerHTML, /<offline>|Gate observation/);
+  app.fire('#log-search', 'input', { value: 'missing' });
+  assert.match(app.get('#log-count').textContent, /No reports match/);
+  app.fire('#log-clear', 'click');
+  assert.match(app.get('#log-count').textContent, /8 of 12/);
+  assert.equal(app.records().reports.length, 12);
+  app.fire('#reset-button', 'click');
+  assert.match(app.get('#log-count').textContent, /No field reports yet/);
+  assert.equal(app.get('#overview-reports').hidden, true);
+});
+
+test('a neighborhood opens a filtered log and a report can be filed, reopened and relayed', () => {
+  const app = harness();
+  app.fire('#level-detail', 'click', { closest: selector => selector === '[data-reports-level]' ? { dataset: { reportsLevel: 'L16' } } : null });
+  assert.deepEqual(app.visible(), ['view-community']);
+  assert.equal(app.get('#report-log').focused, true);
+  assert.equal(app.get('#log-level').value, 'L16');
+  app.fire('#log-type', 'change', { value: 'heat' });
+  app.fire('#log-add', 'click');
+  assert.equal(app.get('#report-dialog').open, true);
+  assert.equal(app.get('#report-level').value, 'L16');
+  assert.equal(app.get('#report-type').value, 'heat');
+  app.get('#report-detail').value = '   ';
+  app.fire('#report-form', 'submit');
+  assert.equal(app.get('#report-error').hidden, false);
+  assert.equal(app.get('#report-dialog').open, true);
+  app.get('#report-detail').value = 'Cooling fan stopped near the east lift.';
+  app.fire('#report-form', 'submit');
+  assert.equal(app.get('#report-dialog').open, false);
+  assert.equal(app.records().reports.length, 1);
+  assert.match(app.get('#log-rows').innerHTML, /L16 · Extreme heat/);
+  assert.match(app.get('#report-list').innerHTML, /Cooling fan/);
+  const restored = harness('#community', JSON.stringify(app.records()));
+  assert.match(restored.get('#log-rows').innerHTML, /Cooling fan/);
+  assert.deepEqual(relay.parsePacket(JSON.stringify(app.records())).reports, app.records().reports);
+});
+
 test('a blocked refuge route hands the whole group to local assistance without saving or losing records', () => {
   const app = harness('#health');
   app.fire('#health-sample', 'click');
@@ -281,7 +367,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   const handlers = new Map();
   const worker = revision => ({ postMessage(message, ports) { ports[0].postMessage({ type: message.type, revision, ready: true }); } });
   const serviceWorker = {
-    controller: worker('v12'),
+    controller: worker('v13'),
     addEventListener: (name, handler) => handlers.set(name, handler),
     register: async () => ({ update: async () => {} }),
   };
@@ -292,7 +378,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   app.fire('#checkin-form', 'submit');
   const before = app.records();
   app.get('#checkin-note').value = 'An unfinished draft';
-  serviceWorker.controller = worker('v13');
+  serviceWorker.controller = worker('v14');
   await handlers.get('controllerchange')();
   assert.equal(app.get('#reload-update').hidden, false);
   assert.match(app.get('#connection-status').textContent, /Update ready/);
