@@ -112,7 +112,6 @@ export function initResponseLab({ getScenario, onScenario, onCheckIn, download, 
   document.querySelectorAll('[data-planner-target]').forEach(button => {
     button.addEventListener('click', () => focusSection(button.dataset.plannerTarget));
   });
-  $('#start-drill').addEventListener('click', startDrill);
   $('#drill-shock').addEventListener('click', startDrill);
   $('#drill-respond').addEventListener('click', () => {
     story = 2; state.minutes = 20; state.blocked = true;

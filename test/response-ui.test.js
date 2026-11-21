@@ -44,7 +44,7 @@ function harness() {
 
 test('guided drill connects time, policy, closure, rerouting, and a draft check-in', () => {
   const h = harness();
-  h.fire('#start-drill');
+  h.fire('#drill-shock');
   assert.equal(h.location.hash, 'response');
   assert.match(h.get('#response-countdown').innerHTML, /7<small> min/);
   h.fire('#drill-respond');

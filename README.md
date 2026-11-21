@@ -70,7 +70,7 @@ Open **[http://127.0.0.1:3000/](http://127.0.0.1:3000/)** in a browser on the sa
 
 Use this browser address to run the app; double-clicking `dist/index.html` does not run the complete application. The local address works on your own computer. Someone using another computer should follow these setup steps there.
 
-For a first look, select **Explore a blackout**, or open **Health & aid → Load sample health signals**. All sample conditions are fictional.
+For a first look, open **Crisis planner → Start a blackout** or **Health & aid → Load sample health signals**. All sample conditions are fictional.
 
 The server serves the app and an optional AI endpoint. Saved resident records stay in the browser. Only an explicit **Explain with AI** request sends the fictional planner settings to the local server, which calculates the source facts and sends those facts to Google Gemini. After downloading the project and installing Node.js, the core app and local briefs work without an internet connection.
 
@@ -151,7 +151,7 @@ The five main tabs have visible labels on desktop, tablet, and phone layouts. Ov
 5. **Request assistance.** Review the proposed clinic and route. Choose **Mobile care / local assistance** when people cannot travel. Save the request and track its coordination status.
 6. **Carry the signal.** Save a check-in or field report in Community. Export a relay packet, transfer it to another device, and import it there.
 
-**Explore a blackout** starts a preset crisis scenario. All controls are also available independently.
+**Start a blackout** in the Crisis planner starts the preset outage scenario.
 
 ## How the features work
 
