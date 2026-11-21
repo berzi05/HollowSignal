@@ -367,7 +367,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   const handlers = new Map();
   const worker = revision => ({ postMessage(message, ports) { ports[0].postMessage({ type: message.type, revision, ready: true }); } });
   const serviceWorker = {
-    controller: worker('v14'),
+    controller: worker('v15'),
     addEventListener: (name, handler) => handlers.set(name, handler),
     register: async () => ({ update: async () => {} }),
   };
@@ -378,7 +378,7 @@ test('a newer cached version shows a reload control without losing drafts or sav
   app.fire('#checkin-form', 'submit');
   const before = app.records();
   app.get('#checkin-note').value = 'An unfinished draft';
-  serviceWorker.controller = worker('v15');
+  serviceWorker.controller = worker('v16');
   await handlers.get('controllerchange')();
   assert.equal(app.get('#reload-update').hidden, false);
   assert.match(app.get('#connection-status').textContent, /Update ready/);
